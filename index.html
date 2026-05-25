@@ -516,6 +516,9 @@ header {
       </div>
       <div class="status-msg" id="j-status"></div>
       <button class="save-btn" id="j-save">✨ Create Journey</button>
+      <button class="save-btn" id="j-ai" style="margin-top:8px;background:rgba(212,175,95,0.12);border:1px solid var(--border);color:var(--gold2);font-weight:500;font-size:0.88rem;">
+        🤖 Use AI to Parse (smarter)
+      </button>
     </div>
   </div>
 </div>
@@ -1244,7 +1247,64 @@ $('j-save').addEventListener('click', () => {
   }, 1000);
 });
 
-// ── UI Wiring ─────────────────────────────────────────────────────────────────
+// ── AI Parse button ───────────────────────────────────────────────────────────
+$('j-ai').addEventListener('click', async () => {
+  const text = $('j-text').value.trim();
+  const status = $('j-status');
+  if (!text) { status.style.color='#e0954a'; status.textContent='⚠️ Paste an itinerary first.'; return; }
+
+  $('j-ai').disabled = true;
+  $('j-save').disabled = true;
+  status.style.color = 'var(--gold2)';
+  status.textContent = '🤖 AI is reading your itinerary…';
+
+  try {
+    const res = await fetch('/.netlify/functions/parse-itinerary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const parsed = await res.json();
+
+    if (!parsed.stops || parsed.stops.length < 2) {
+      status.style.color = 'var(--red)';
+      status.textContent = '❌ AI could not find stops. Try the smart parser instead.';
+      $('j-ai').disabled = false; $('j-save').disabled = false;
+      return;
+    }
+
+    // Fill in name if blank
+    if (!$('j-name').value.trim() && parsed.tripName) $('j-name').value = parsed.tripName;
+
+    // Save the trip
+    const nameOverride = $('j-name').value.trim();
+    const stops = parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null }));
+    const tripName = nameOverride || parsed.tripName || (stops[0].city + ' → ' + stops[stops.length-1].city);
+    const trip = { name: tripName, stops, visible: true };
+
+    if (editIdx >= 0) { trips[editIdx] = trip; } else { trips.push(trip); }
+    editIdx = -1;
+    saveTrips(); updateStats(); renderTrips();
+
+    status.style.color = '#7ec87e';
+    status.textContent = `✅ AI found ${stops.length} stops!`;
+
+    const first = stops[0];
+    if (first?.coords) { rotLon = -first.coords[1]; rotLat = -first.coords[0] * .7; spinning = false; }
+
+    setTimeout(() => {
+      close_('ov-journey');
+      $('j-name').value = ''; $('j-text').value = ''; $('j-status').textContent = '';
+      $('j-ai').disabled = false; $('j-save').disabled = false;
+      editIdx = -1;
+    }, 1000);
+
+  } catch(err) {
+    status.style.color = 'var(--red)';
+    status.textContent = '❌ AI unavailable — tap "Create Journey" to use smart parser.';
+    $('j-ai').disabled = false; $('j-save').disabled = false;
+  }
+});
 $('btn-trips').addEventListener('click',()=>{renderTrips();open_('ov-trips');});
 $('btn-add').addEventListener('click',()=>{
   editIdx=-1; $('journey-title').textContent='New Journey';
