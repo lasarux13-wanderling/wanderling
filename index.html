@@ -1139,6 +1139,11 @@ function cleanPort(s) {
 }
 
 function isSea(s) { return SEA_DAYS.some(k=>s.toLowerCase().includes(k)); }
+function seaLabel(s) {
+  // Return clean sea day label
+  if (/cruising/i.test(s)) return 'At Sea (Cruising)';
+  return 'At Sea';
+}
 
 function parseItinerary(text) {
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -1155,37 +1160,74 @@ function parseItinerary(text) {
     }
   }
 
+  // ── Handle run-together "Day X (Month DD): Port." format ──────────────────
+  // e.g. "Day 1 (May 2): Cape Liberty.Day 2 (May 3): At Sea.Day 3 (May 4): Bermuda."
+  if (/Day \d+\s*[\(\[]/i.test(text)) {
+    const dayParts = text.split(/(?=Day \d+\s*[\(\[])/i).filter(Boolean);
+    const dayStops = [];
+    for (const part of dayParts) {
+      const dm = part.match(/Day \d+\s*[\(\[]([A-Za-z]+)\s+(\d+)(?:,?\s*(\d{4}))?[\)\]]/i);
+      if (!dm) continue;
+      const mo = MONTHS[dm[1].toLowerCase()];
+      if (!mo) continue;
+      const yr = dm[3] || new Date().getFullYear();
+      const date = `${yr}-${String(mo).padStart(2,'0')}-${String(dm[2]).padStart(2,'0')}`;
+
+      // Check if sea day
+      if (isSea(part)) {
+        dayStops.push({ city: 'At Sea', date });
+        continue;
+      }
+
+      let city = part.replace(/Day \d+\s*[\(\[][^\)\]]+[\)\]]\s*:?\s*/i,'').trim();
+      city = city.replace(/^(?:departs?\s+from|arrives?\s+in|returns?\s+to|departs?|arrives?|returns?)\s+/i,'');
+      city = city.replace(/\s+at\s+\d+:\d+\s*[AP]M.*/i,'');
+      city = city.replace(/[–—-]\s*(?:departs?|arrives?).*/i,'');
+      city = city.replace(/\.\s*$/, '').replace(/^in\s+/i,'').trim();
+      if (city && city.length > 2) dayStops.push({ city, date });
+    }
+    if (dayStops.length >= 2) return { tripName, stops: dayStops };
+  }
+
   for(const line of lines){
-    if(isSea(line)) continue;
     if(SKIP_START.some(s=>line.toLowerCase().startsWith(s))) continue;
     if(/^day\s+date\s+port/i.test(line)) continue;
-    if(/^\d{4,}$/.test(line)) continue; // pure long numbers
+    if(/^\d{4,}$/.test(line)) continue;
 
     // Tab-separated table: Day X \t Date \t Port
     const parts=line.split(/\t/);
     if(parts.length>=3){
       const date=parseDate(parts[1]);
-      const city=cleanPort(parts[2]);
-      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
+      const rawCity=cleanPort(parts[2]);
+      const city = isSea(rawCity) ? 'At Sea' : rawCity;
+      if(date&&city){stops.push({city,date});continue;}
     }
 
     // Date — Port  (various formats)
     const m=line.match(/^(?:[A-Za-z]+,\s+)?([A-Za-z]+\s+\d{1,2},?\s*\d{4})\s*[\t–—:\-]+\s*(.+)$/);
     if(m){
-      const date=parseDate(m[1]), city=cleanPort(m[2]);
-      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
+      const date=parseDate(m[1]);
+      const rawCity=cleanPort(m[2]);
+      const city = isSea(rawCity) ? 'At Sea' : rawCity;
+      if(date&&city){stops.push({city,date});continue;}
     }
 
     // Month DD — Port (no year)
     const m2=line.match(/^([A-Za-z]+\s+\d{1,2})\s*[–—:-]+\s*(.+)$/);
     if(m2){
-      const date=parseDate(m2[1]), city=cleanPort(m2[2]);
-      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
+      const date=parseDate(m2[1]);
+      const rawCity=cleanPort(m2[2]);
+      const city = isSea(rawCity) ? 'At Sea' : rawCity;
+      if(date&&city){stops.push({city,date});continue;}
     }
 
     // Day X: Port
     const m3=line.match(/^day\s+\d+\s*[:\-–—]\s*(.+)$/i);
-    if(m3){const city=cleanPort(m3[1]);if(city&&!isSea(city))stops.push({city,date:null});}
+    if(m3){
+      const rawCity=cleanPort(m3[1]);
+      const city = isSea(rawCity) ? 'At Sea' : rawCity;
+      if(city) stops.push({city,date:null});
+    }
   }
 
   return {tripName, stops};
@@ -1231,18 +1273,23 @@ function renderTrips(){
       <div class="card-body" id="cb${i}">
         ${s.map((st,si)=>{
           const isFirst=si===0, isLast=si===s.length-1;
-          const stopHtml=`<div class="stop-line">
-            <div class="stop-dot${isFirst?' dep':''}"></div>
+          const isSeaDay = st.city==='At Sea' || st.city==='At Sea (Cruising)';
+          const stopHtml=`<div class="stop-line" style="${isSeaDay?'opacity:0.55;':''}">
+            ${isSeaDay
+              ? `<span style="font-size:0.9rem;flex-shrink:0">🌊</span>`
+              : `<div class="stop-dot${isFirst?' dep':''}"></div>`
+            }
             <span>${st.city}</span>
             <span class="stop-date">${fmtDate(st.date)}</span>
           </div>`;
           const nextStop=s[si+1];
           let photoHtml='';
-          if(nextStop&&st.date&&nextStop.date){
+          if(st.date){
             const url=`https://photos.google.com/search/${st.date}`;
+            const label = isSeaDay ? `Day at Sea` : st.city;
             photoHtml=`<a class="photo-link" href="${url}" target="_blank" rel="noopener">
               <span>📷</span>
-              <span class="photo-link-text"><strong>${st.city} → ${nextStop.city}</strong>${fmtDate(st.date)} – ${fmtDate(nextStop.date)}</span>
+              <span class="photo-link-text"><strong>${label}</strong>${fmtDate(st.date)}</span>
               <span class="photo-link-arrow">↗</span>
             </a>`;
           }
