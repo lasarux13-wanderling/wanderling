@@ -1091,23 +1091,35 @@ function draw() {
       if (zoom >= 2.5 && !s.estimated && s.coords) {
         const pt = p([s.coords[1], s.coords[0]]);
         if (!pt) return;
-        // Ship name appears after — in trip name e.g. "5-Night Bermuda — Independence of the Seas"
-        // Just grab first word after the dash, or first word of trip name
+        // Extract ship name - look for known ship words in trip name
         const nameParts = t.name || '';
-        const afterDash = nameParts.includes('—') ? nameParts.split('—')[1].trim() :
-                          nameParts.includes('–') ? nameParts.split('–')[1].trim() : nameParts;
-        const shipName = afterDash.split(/\s+/)[0] || '';
+        let shipName = '';
+        // Look for "of the Seas" ships first
+        const shipMatch = nameParts.match(/\b(Independence|Anthem|Symphony|Wonder|Icon|Oasis|Allure|Harmony|Navigator|Explorer|Adventure|Voyager|Freedom|Liberty|Mariner|Vision|Radiance|Brilliance|Serenade|Jewel|Enchantment|Grandeur|Utopia|Odyssey|Spectrum|Quantum|Ovation|Carnival|Norwegian|Celebrity|Princess|Disney|MSC|Royal)\b/i);
+        if (shipMatch) {
+          shipName = shipMatch[1];
+        } else {
+          // Try after dash
+          const afterDash = nameParts.includes('—') ? nameParts.split('—')[1].trim() :
+                            nameParts.includes('–') ? nameParts.split('–')[1].trim() : '';
+          if (afterDash) shipName = afterDash.split(/\s+/)[0];
+        }
+
         const dateStr = s.date ? s.date.slice(5).replace('-','/') + '/' + s.date.slice(2,4) : '';
-        const label = [shipName, s.city, dateStr].filter(Boolean).join('  ·  ');
-        const dpr = devicePixelRatio||1;
+        const parts = [shipName, s.city, dateStr].filter(Boolean);
+        const label = parts.join('  ·  ');
+
+        if (!pt) return;
+
         ctx.save();
-        ctx.font = `${Math.round(9*dpr)}px sans-serif`;
-        ctx.fillStyle = 'rgba(232,228,218,0.9)';
-        ctx.strokeStyle = 'rgba(7,9,15,0.85)';
-        ctx.lineWidth = 2.5*dpr;
+        ctx.font = `bold 9px sans-serif`;
+        ctx.fillStyle = 'rgba(232,228,218,0.95)';
+        ctx.strokeStyle = 'rgba(7,9,15,0.9)';
+        ctx.lineWidth = 3;
         ctx.textAlign = 'left';
-        const tx = pt[0] + 8;
-        const ty = pt[1] - 6;
+        // Offset label to avoid dot
+        const tx = pt[0] + 9;
+        const ty = pt[1] - 8;
         ctx.strokeText(label, tx, ty);
         ctx.fillText(label, tx, ty);
         ctx.restore();
