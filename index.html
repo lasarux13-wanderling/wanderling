@@ -1648,6 +1648,23 @@ $('j-save').addEventListener('click', () => {
     if (!tripName) tripName = trips[editIdx].name;
   }
   if (stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ Need at least 2 stops.'; return; }
+
+  // Check for duplicates — same first stop city AND date
+  if (editIdx < 0) {
+    const firstStop = stops[0];
+    const duplicate = trips.find(t => {
+      const ts = t.stops?.[0];
+      if (!ts) return false;
+      const sameCity = ts.city?.toLowerCase().trim() === firstStop.city?.toLowerCase().trim();
+      const sameDate = ts.date === firstStop.date;
+      return sameCity && sameDate;
+    });
+    if (duplicate) {
+      status.style.color = '#e0954a';
+      status.textContent = `⚠️ "${duplicate.name}" already exists with the same departure. Edit it instead?`;
+      return;
+    }
+  }
   const trip = { name: tripName, ship: shipNameOverride, stops, visible: true };
   if (editIdx >= 0) { trips[editIdx] = trip; } else { trips.push(trip); }
   editIdx = -1;
