@@ -1091,18 +1091,17 @@ function draw() {
       if (zoom >= 2.5 && !s.estimated && s.coords) {
         const pt = p([s.coords[1], s.coords[0]]);
         if (!pt) return;
-        // Extract ship name - look for known ship words in trip name
-        const nameParts = t.name || '';
-        let shipName = '';
-        // Look for "of the Seas" ships first
-        const shipMatch = nameParts.match(/\b(Independence|Anthem|Symphony|Wonder|Icon|Oasis|Allure|Harmony|Navigator|Explorer|Adventure|Voyager|Freedom|Liberty|Mariner|Vision|Radiance|Brilliance|Serenade|Jewel|Enchantment|Grandeur|Utopia|Odyssey|Spectrum|Quantum|Ovation|Carnival|Norwegian|Celebrity|Princess|Disney|MSC|Royal)\b/i);
-        if (shipMatch) {
-          shipName = shipMatch[1];
-        } else {
-          // Try after dash
-          const afterDash = nameParts.includes('—') ? nameParts.split('—')[1].trim() :
-                            nameParts.includes('–') ? nameParts.split('–')[1].trim() : '';
-          if (afterDash) shipName = afterDash.split(/\s+/)[0];
+        // Use stored ship name first, then scan trip name for known ships
+        let shipName = t.ship || '';
+        if (!shipName) {
+          const nameParts = t.name || '';
+          const shipMatch = nameParts.match(/\b(Independence|Anthem|Symphony|Wonder|Icon|Oasis|Allure|Harmony|Navigator|Explorer|Adventure|Voyager|Freedom|Liberty|Mariner|Vision|Radiance|Brilliance|Serenade|Jewel|Enchantment|Grandeur|Utopia|Odyssey|Spectrum|Quantum|Ovation|Carnival|Norwegian|Celebrity|Princess|Disney|MSC|Royal)\b/i);
+          if (shipMatch) shipName = shipMatch[1];
+          else {
+            const afterDash = nameParts.includes('—') ? nameParts.split('—')[1].trim() :
+                              nameParts.includes('–') ? nameParts.split('–')[1].trim() : '';
+            if (afterDash) shipName = afterDash.split(/\s+/)[0];
+          }
         }
 
         const dateStr = s.date ? s.date.slice(5).replace('-','/') + '/' + s.date.slice(2,4) : '';
@@ -1224,7 +1223,16 @@ function seaLabel(s) {
 
 function parseItinerary(text) {
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-  let tripName='', stops=[];
+  let tripName='', stops=[], shipName='';
+
+  // Extract Ship: field if present
+  for (const line of lines) {
+    const shipMatch = line.match(/^ship\s*:\s*(.+)$/i);
+    if (shipMatch) {
+      shipName = shipMatch[1].trim().split(/\s+/)[0]; // first word only
+      break;
+    }
+  }
 
   // Find trip name
   for(const line of lines){
@@ -1326,7 +1334,7 @@ function parseItinerary(text) {
     }
   }
 
-  return {tripName, stops};
+  return {tripName, shipName, stops};
 }
 
 // ── Trip Management ───────────────────────────────────────────────────────────
@@ -1560,6 +1568,7 @@ $('j-search').addEventListener('click', async () => {
 
     pendingTrip = {
       name: parsed.tripName || (ship + (date ? ' — '+fmtDate(date) : '')).trim(),
+      ship: ship ? ship.split(/\s+/)[0] : '',
       stops: parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null })),
       visible: true
     };
@@ -1625,18 +1634,19 @@ $('j-save').addEventListener('click', () => {
   const nameOverride = $('j-name').value.trim();
   const status = $('j-paste-status');
   if (!text && editIdx < 0) { status.style.color='#e0954a'; status.textContent='⚠️ Paste an itinerary to get started.'; return; }
-  let stops = [], tripName = nameOverride;
+  let stops = [], tripName = nameOverride, shipNameOverride = '';
   if (text) {
     const parsed = parseItinerary(text);
     if (!parsed.stops || parsed.stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ No ports found.'; return; }
     stops = parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null }));
     if (!tripName) tripName = parsed.tripName || (stops[0].city + ' → ' + stops[stops.length-1].city);
+    if (parsed.shipName && !shipNameOverride) shipNameOverride = parsed.shipName;
   } else if (editIdx >= 0) {
     stops = trips[editIdx].stops;
     if (!tripName) tripName = trips[editIdx].name;
   }
   if (stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ Need at least 2 stops.'; return; }
-  const trip = { name: tripName, stops, visible: true };
+  const trip = { name: tripName, ship: shipNameOverride, stops, visible: true };
   if (editIdx >= 0) { trips[editIdx] = trip; } else { trips.push(trip); }
   editIdx = -1;
   saveTrips(); updateStats(); renderTrips();
