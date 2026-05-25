@@ -236,7 +236,32 @@ header {
   margin-top: 12px;
 }
 .mode-hint a { color: var(--gold); cursor: pointer; }
-#display-field { display: none; }
+/* Security questions */
+.sq-block { margin-bottom: 13px; }
+.sq-block select {
+  width: 100%; padding: 11px 13px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 0.88rem;
+  outline: none; margin-bottom: 7px;
+  appearance: none; cursor: pointer;
+}
+.sq-block select:focus { border-color: var(--gold); }
+.sq-block select option { background: #0e1220; color: var(--text); }
+
+/* Forgot password link */
+.forgot-link {
+  display: block; text-align: right;
+  font-size: 0.75rem; color: var(--gold);
+  cursor: pointer; margin-top: -8px; margin-bottom: 14px;
+}
+
+/* Lockout warning */
+.lockout-msg {
+  font-size: 0.78rem; color: var(--red);
+  text-align: center; margin-bottom: 8px;
+}
 
 /* ── Trip Cards ──────────────────────────────────────────────────────────── */
 .trip-card {
@@ -362,27 +387,94 @@ header {
   <div id="login-box">
     <div class="login-logo">Wandermap</div>
     <div class="login-sub">Your personal travel globe</div>
-    <div id="display-field" class="field">
-      <label>Your Name</label>
-      <input type="text" id="l-display" placeholder="e.g. Allen" autocomplete="name">
+
+    <!-- Sign In / Register fields -->
+    <div id="auth-fields">
+      <div id="display-field" class="field" style="display:none">
+        <label>Your Name</label>
+        <input type="text" id="l-display" placeholder="e.g. Allen" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="l-user" placeholder="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <a class="forgot-link" id="forgot-link">Forgot password?</a>
+
+      <!-- Security questions — shown only during registration -->
+      <div id="sq-fields" style="display:none">
+        <div class="sq-block">
+          <label style="font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold2);opacity:0.55;display:block;margin-bottom:6px;">Security Question 1</label>
+          <select id="sq1">
+            <option value="">— Select a question —</option>
+            <option>What city were you born in?</option>
+            <option>What was your first pet's name?</option>
+            <option>What is your mother's maiden name?</option>
+            <option>What was the name of your first school?</option>
+            <option>What street did you grow up on?</option>
+            <option>What was your childhood nickname?</option>
+            <option>What is your oldest sibling's name?</option>
+            <option>What was the make of your first car?</option>
+          </select>
+          <input type="text" id="sa1" placeholder="Your answer" autocomplete="off" autocorrect="off" style="width:100%;padding:11px 13px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:0.88rem;outline:none;">
+        </div>
+        <div class="sq-block">
+          <label style="font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold2);opacity:0.55;display:block;margin-bottom:6px;">Security Question 2</label>
+          <select id="sq2">
+            <option value="">— Select a question —</option>
+            <option>What city were you born in?</option>
+            <option>What was your first pet's name?</option>
+            <option>What is your mother's maiden name?</option>
+            <option>What was the name of your first school?</option>
+            <option>What street did you grow up on?</option>
+            <option>What was your childhood nickname?</option>
+            <option>What is your oldest sibling's name?</option>
+            <option>What was the make of your first car?</option>
+          </select>
+          <input type="text" id="sa2" placeholder="Your answer" autocomplete="off" autocorrect="off" style="width:100%;padding:11px 13px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:0.88rem;outline:none;">
+        </div>
+      </div>
+
+      <label class="remember-row">
+        <input type="checkbox" id="l-remember" checked>
+        <span>Remember me on this device</span>
+      </label>
+      <div class="login-err" id="l-err"></div>
+      <button class="login-btn login-btn-primary" id="l-submit">Sign In</button>
+      <div class="login-divider" id="l-divider">— or —</div>
+      <button class="login-btn login-btn-secondary" id="l-switch-btn">Create Account</button>
+      <div class="mode-hint">New here? <a id="l-mode-link">Create a free account</a></div>
     </div>
-    <div class="field">
-      <label>Username</label>
-      <input type="text" id="l-user" placeholder="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+    <!-- Forgot Password flow -->
+    <div id="forgot-fields" style="display:none">
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6;">Answer your security questions to reset your password.</p>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="fp-user" placeholder="username" autocorrect="off" autocapitalize="off">
+      </div>
+      <div id="fp-questions" style="display:none">
+        <div class="field">
+          <label id="fp-q1-label">Question 1</label>
+          <input type="text" id="fp-a1" placeholder="Your answer" autocomplete="off" autocorrect="off">
+        </div>
+        <div class="field">
+          <label id="fp-q2-label">Question 2</label>
+          <input type="text" id="fp-a2" placeholder="Your answer" autocomplete="off" autocorrect="off">
+        </div>
+        <div class="field">
+          <label>New Password</label>
+          <input type="password" id="fp-newpass" placeholder="New password (4+ characters)">
+        </div>
+      </div>
+      <div class="lockout-msg" id="fp-lockout"></div>
+      <div class="login-err" id="fp-err"></div>
+      <button class="login-btn login-btn-primary" id="fp-submit">Find Account</button>
+      <div class="mode-hint" style="margin-top:10px"><a id="fp-back">← Back to sign in</a></div>
     </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <label class="remember-row">
-      <input type="checkbox" id="l-remember" checked>
-      <span>Remember me on this device</span>
-    </label>
-    <div class="login-err" id="l-err"></div>
-    <button class="login-btn login-btn-primary" id="l-submit">Sign In</button>
-    <div class="login-divider" id="l-divider">— or —</div>
-    <button class="login-btn login-btn-secondary" id="l-switch-btn">Create Account</button>
-    <div class="mode-hint">New here? <a id="l-mode-link">Create a free account</a></div>
   </div>
 </div>
 
@@ -596,16 +688,33 @@ let trips = loadTrips(null);
 
 // ── Login logic ───────────────────────────────────────────────────────────────
 let loginMode = 'signin';
+let failedAttempts = 0;
+let lockoutUntil = 0;
 
 function setMode(mode) {
   loginMode = mode;
   const isReg = mode === 'register';
   $('display-field').style.display = isReg ? '' : 'none';
+  $('sq-fields').style.display = isReg ? '' : 'none';
   $('l-submit').textContent = isReg ? 'Create Account' : 'Sign In';
   $('l-switch-btn').style.display = isReg ? 'none' : '';
   $('l-divider').style.display = isReg ? 'none' : '';
   $('l-mode-link').textContent = isReg ? 'Back to sign in' : 'Create a free account';
   $('l-err').textContent = '';
+  $('auth-fields').style.display = '';
+  $('forgot-fields').style.display = 'none';
+}
+
+function showForgot() {
+  $('auth-fields').style.display = 'none';
+  $('forgot-fields').style.display = '';
+  $('fp-err').textContent = '';
+  $('fp-lockout').textContent = '';
+  $('fp-user').value = '';
+  $('fp-a1').value = ''; $('fp-a2').value = '';
+  $('fp-newpass').value = '';
+  $('fp-questions').style.display = 'none';
+  $('fp-submit').textContent = 'Find Account';
 }
 
 function doLogin() {
@@ -613,25 +722,123 @@ function doLogin() {
   const password = $('l-pass').value;
   const remember = $('l-remember').checked;
   const err = $('l-err');
+
+  // Check lockout
+  if (Date.now() < lockoutUntil) {
+    const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+    err.textContent = `Too many attempts. Try again in ${secs}s.`;
+    return;
+  }
+
   if (!username) { err.textContent='Please enter a username.'; return; }
   if (!password)  { err.textContent='Please enter a password.'; return; }
   const users = getUsers();
 
   if (loginMode === 'register') {
     const display = $('l-display').value.trim() || titleCase(username);
+    const q1 = $('sq1').value, a1 = $('sa1').value.trim();
+    const q2 = $('sq2').value, a2 = $('sa2').value.trim();
     if (username.length < 3) { err.textContent='Username needs 3+ characters.'; return; }
     if (password.length < 4) { err.textContent='Password needs 4+ characters.'; return; }
     if (users[username]) { err.textContent='Username taken — try another.'; return; }
-    users[username] = { hash: hashPw(password), display };
+    if (!q1) { err.textContent='Please select Security Question 1.'; return; }
+    if (!a1) { err.textContent='Please answer Security Question 1.'; return; }
+    if (!q2) { err.textContent='Please select Security Question 2.'; return; }
+    if (!a2) { err.textContent='Please answer Security Question 2.'; return; }
+    if (q1 === q2) { err.textContent='Please choose two different security questions.'; return; }
+    users[username] = {
+      hash: hashPw(password), display,
+      sq1: q1, sa1: hashPw(a1.toLowerCase()),
+      sq2: q2, sa2: hashPw(a2.toLowerCase()),
+    };
     saveUsers(users);
+    failedAttempts = 0;
     startSession(username, display, remember, password);
   } else {
     const u = users[username];
     if (!u) { err.textContent='Account not found.'; return; }
-    if (u.hash !== hashPw(password)) { err.textContent='Incorrect password.'; return; }
+    if (u.hash !== hashPw(password)) {
+      failedAttempts++;
+      if (failedAttempts >= 3) {
+        lockoutUntil = Date.now() + 30000;
+        failedAttempts = 0;
+        err.textContent = 'Too many failed attempts. Locked for 30 seconds.';
+      } else {
+        err.textContent = `Incorrect password. ${3-failedAttempts} attempt${3-failedAttempts===1?'':'s'} remaining.`;
+      }
+      return;
+    }
+    failedAttempts = 0;
     startSession(username, u.display||titleCase(username), remember, password);
   }
 }
+
+// ── Forgot Password ───────────────────────────────────────────────────────────
+let fpAttempts = 0;
+let fpLockUntil = 0;
+let fpStep = 'find'; // 'find' | 'answer'
+
+$('forgot-link').addEventListener('click', showForgot);
+$('fp-back').addEventListener('click', () => setMode('signin'));
+
+$('fp-submit').addEventListener('click', () => {
+  const fpErr = $('fp-err');
+  fpErr.textContent = '';
+
+  if (Date.now() < fpLockUntil) {
+    const secs = Math.ceil((fpLockUntil - Date.now()) / 1000);
+    $('fp-lockout').textContent = `Too many attempts. Try again in ${secs}s.`;
+    return;
+  }
+  $('fp-lockout').textContent = '';
+
+  if (fpStep === 'find') {
+    const username = $('fp-user').value.trim().toLowerCase();
+    if (!username) { fpErr.textContent = 'Enter your username.'; return; }
+    const u = getUsers()[username];
+    if (!u) { fpErr.textContent = 'Username not found.'; return; }
+    if (!u.sq1) { fpErr.textContent = 'No security questions set for this account.'; return; }
+    // Show questions
+    $('fp-q1-label').textContent = u.sq1;
+    $('fp-q2-label').textContent = u.sq2;
+    $('fp-questions').style.display = '';
+    $('fp-submit').textContent = 'Reset Password';
+    fpStep = 'answer';
+  } else {
+    const username = $('fp-user').value.trim().toLowerCase();
+    const a1 = $('fp-a1').value.trim().toLowerCase();
+    const a2 = $('fp-a2').value.trim().toLowerCase();
+    const newpass = $('fp-newpass').value;
+    const users = getUsers();
+    const u = users[username];
+    if (!u) { fpErr.textContent = 'Account not found.'; return; }
+    if (!a1 || !a2) { fpErr.textContent = 'Please answer both questions.'; return; }
+    if (newpass.length < 4) { fpErr.textContent = 'New password needs 4+ characters.'; return; }
+
+    if (u.sa1 !== hashPw(a1) || u.sa2 !== hashPw(a2)) {
+      fpAttempts++;
+      if (fpAttempts >= 3) {
+        fpLockUntil = Date.now() + 30000;
+        fpAttempts = 0;
+        $('fp-lockout').textContent = 'Too many wrong answers. Locked for 30 seconds.';
+      } else {
+        fpErr.textContent = `Incorrect answers. ${3-fpAttempts} attempt${3-fpAttempts===1?'':'s'} remaining.`;
+      }
+      return;
+    }
+
+    // Correct — reset password
+    users[username].hash = hashPw(newpass);
+    saveUsers(users);
+    fpAttempts = 0; fpStep = 'find';
+    $('l-err').textContent = '';
+    $('l-user').value = username;
+    $('l-pass').value = '';
+    setMode('signin');
+    $('l-err').style.color = '#7ec87e';
+    $('l-err').textContent = '✅ Password reset! Sign in with your new password.';
+  }
+});
 
 function startSession(username, display, remember, password) {
   currentUser = { username, display };
