@@ -28,7 +28,7 @@ exports.handler = async function(event) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
       body: JSON.stringify({
-        model: 'mixtral-8x7b-32768',
+        model: 'llama-3.3-70b-versatile',
         temperature: 0,
         max_tokens: 1000,
         messages: [{ role: 'user', content: userMessage }]
