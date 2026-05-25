@@ -549,7 +549,7 @@ header {
           <div id="journey-type-badge" style="font-size:0.72rem;padding:4px 10px;border-radius:20px;background:rgba(212,175,95,0.15);border:1px solid var(--border);color:var(--gold2)"></div>
           <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="resetJourney()">← Change</a>
         </div>
-        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6;">Tell me a little about your trip — I'll find the itinerary for you.</p>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6;">Tell me about your trip and I'll find the itinerary. Results are AI-generated — if anything looks off, you can paste your confirmation instead.</p>
 
         <div class="field">
           <label>Ship Name</label>
@@ -577,7 +577,10 @@ header {
       <!-- Step 3: Confirm result -->
       <div id="step-confirm" style="display:none">
         <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">Is this your trip?</p>
-        <div id="confirm-card" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px"></div>
+        <div id="confirm-card" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px"></div>
+        <div style="background:rgba(212,175,95,0.07);border:1px solid rgba(212,175,95,0.15);border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:0.75rem;color:var(--muted);line-height:1.5;">
+          ⚠️ AI results are approximate. If the ports or dates look wrong, tap <strong style="color:var(--gold2)">No</strong> and paste your confirmation for 100% accuracy.
+        </div>
         <div style="display:flex;gap:10px">
           <button class="save-btn" id="btn-confirm-yes" style="flex:2;background:var(--gold)">✅ Yes, that's it!</button>
           <button class="save-btn" id="btn-confirm-no" style="flex:1;background:rgba(224,90,58,0.15);border:1px solid rgba(224,90,58,0.3);color:var(--red)">No</button>
@@ -1447,11 +1450,30 @@ $('btn-confirm-yes').addEventListener('click', () => {
 });
 
 $('btn-confirm-no').addEventListener('click', () => {
-  $('step-confirm').style.display = 'none';
-  $('step-search').style.display = '';
-  $('j-status').style.color = 'var(--gold2)';
-  $('j-status').textContent = "Let's try again — add more details or try the departure port.";
   pendingTrip = null;
+  $('step-confirm').style.display = 'none';
+
+  // Pre-fill ship name in the trip name field
+  const ship = $('j-ship')?.value?.trim() || '';
+  const date = $('j-date')?.value || '';
+  if (ship && $('j-name')) {
+    $('j-name').value = ship + (date ? ' — ' + fmtDate(date) : '');
+  }
+
+  // Show paste screen with a helpful note
+  const note = $('paste-future-note');
+  if (note) {
+    note.style.display = '';
+    note.innerHTML = `<div style="font-size:0.82rem;color:#7dd4f0;line-height:1.6;">
+      <strong style="display:block;margin-bottom:4px">📋 No problem! Paste your confirmation</strong>
+      Copy the itinerary from your cruise confirmation email or the cruise line's website and paste it below — we'll extract every port and date automatically.
+    </div>`;
+  }
+
+  $('step-paste').style.display = '';
+  $('j-paste-status').textContent = '';
+  const backLink = $('back-to-search-link');
+  if (backLink) backLink.style.display = '';
 });
 
 // Paste fallback save
