@@ -27,61 +27,85 @@ exports.handler = async function(event) {
         const dateStr = !isNaN(d) ? d.toISOString().split('T')[0] : '';
         const shipSlug = ship.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-        // Try multiple sources
-        const urls = [
-          `https://gangwaze.com/cruise-lines/royal-caribbean/${shipSlug}/${dateStr}/5-nights`,
-          `https://gangwaze.com/cruise-lines/royal-caribbean/${shipSlug}/${dateStr}/7-nights`,
-          `https://gangwaze.com/cruise-lines/carnival/${shipSlug}/${dateStr}/7-nights`,
-          `https://gangwaze.com/cruise-lines/norwegian/${shipSlug}/${dateStr}/7-nights`,
+        // Cruise lines to try
+        const cruiseLines = [
+          'royal-caribbean', 'carnival', 'norwegian', 'celebrity',
+          'princess', 'holland-america', 'msc', 'disney'
         ];
+        // Night lengths to try
+        const nights = ['5-nights','7-nights','4-nights','6-nights','8-nights','9-nights','10-nights','11-nights','12-nights','14-nights','3-nights'];
 
-        for (const url of urls) {
+        let found = false;
+        outer:
+        for (const line of cruiseLines) {
+          for (const night of nights) {
+            const url = `https://gangwaze.com/cruise-lines/${line}/${shipSlug}/${dateStr}/${night}`;
+            try {
+              const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Wandermap/1.0)' },
+                signal: AbortSignal.timeout(5000)
+              });
+              if (!res.ok) continue;
+
+              const html = await res.text();
+              // Check it's a real itinerary page not a redirect/404
+              if (!html.includes('Cruise Ports') && !html.includes('cruise-ports')) continue;
+
+              const plain = html
+                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/&amp;/g,'&').replace(/&#\d+;/g,' ')
+                .replace(/\s+/g, ' ').trim();
+
+              // Extract itinerary section
+              const startIdx = plain.search(/Cruise Itinerary|Cruise Ports|itinerary route/i);
+              const endIdx = plain.search(/Weather Forecast|Shore Excursion|Safety Score|Cruise Ship\s/i);
+              if (startIdx > -1) {
+                const section = plain.slice(startIdx, endIdx > startIdx ? endIdx : startIdx + 4000);
+                contextText = `Ship: ${ship}\nDate: ${dateRaw}\nSource URL: ${url}\n\nReal itinerary data from gangwaze.com:\n${section}`;
+                found = true;
+                break outer;
+              }
+            } catch { continue; }
+          }
+        }
+
+        if (!found) {
+          // Fallback: try gangwaze search page
           try {
-            const res = await fetch(url, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Wandermap/1.0)' }
-            });
-            if (!res.ok) continue;
-
-            const html = await res.text();
-            const plain = html.replace(/<script[\s\S]*?<\/script>/gi, '')
-                              .replace(/<style[\s\S]*?<\/style>/gi, '')
-                              .replace(/<[^>]+>/g, ' ')
-                              .replace(/\s+/g, ' ');
-
-            // Find itinerary section
-            const start = plain.search(/cruise itinerary|itinerary map|cruise ports/i);
-            const end = plain.search(/weather forecast|shore excursion|safety score/i);
-
-            if (start > -1) {
-              const section = plain.slice(start, end > start ? end : start + 3000);
-              contextText = `Ship: ${ship}\nDate: ${dateRaw}\n\nReal itinerary data:\n${section}`;
-              break;
+            const searchUrl = `https://gangwaze.com/cruise-search?ship=${encodeURIComponent(ship)}&date=${dateStr}`;
+            const res = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+              const html = await res.text();
+              const plain = html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+              contextText = `${text}\n\nSearch results:\n${plain.slice(0,3000)}`;
             }
-          } catch { continue; }
+          } catch {}
         }
       }
     } catch(e) {
-      console.log('Web search failed:', e.message);
+      console.log('Web search error:', e.message);
     }
   }
 
   const systemPrompt = mode === 'search'
-    ? `You are a cruise itinerary assistant. Extract the cruise itinerary from the data provided and return ONLY valid JSON with no markdown:
+    ? `You are a cruise itinerary assistant. Extract the cruise itinerary from the data and return ONLY valid JSON, no markdown:
 {"tripName":"string","stops":[{"city":"City Name","date":"YYYY-MM-DD"}]}
-IMPORTANT rules:
-- Skip ALL "At Sea" days
-- Include departure port as first stop and return port as last stop  
-- Convert ALL dates to YYYY-MM-DD format
-- City names should be clean: "Cape Liberty, Bayonne NJ" or "Royal Naval Dockyard, Bermuda"
-- Trip name format: "5-Night Bermuda Cruise — Independence of the Seas"
-- If you truly cannot determine the itinerary, return {"stops":[]}`
-    : `You are a travel itinerary parser. Return ONLY valid JSON with no markdown:
-{"tripName":"string","stops":[{"city":"City Name","date":"YYYY-MM-DD"}]}
-- Skip At Sea/Sea Day entries
-- Skip room, deck, reservation number lines
+Rules:
+- Skip ALL At Sea / Sea Day entries
+- First stop = departure port, last stop = return port
 - All dates in YYYY-MM-DD format
-- Remove time info and Depart/Return/Arrive from city names
-- Trip name from first title-like line`;
+- Clean city names: remove arrival/departure times, Depart/Return/Arrive labels
+- Trip name: "X-Night [Destination] — [Ship Name]"
+- If itinerary cannot be determined, return {"stops":[]}`
+    : `You are a travel itinerary parser. Return ONLY valid JSON, no markdown:
+{"tripName":"string","stops":[{"city":"City Name","date":"YYYY-MM-DD"}]}
+- Skip At Sea / Sea Day entries
+- Skip room, deck, reservation lines
+- All dates YYYY-MM-DD
+- Remove times and Depart/Return/Arrive from city names
+- Extract trip name from first title line`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -104,7 +128,7 @@ IMPORTANT rules:
     const data = await response.json();
     const raw = data.choices?.[0]?.message?.content || '';
     let parsed;
-    try { parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
+    try { parsed = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
     catch { return { statusCode: 500, body: JSON.stringify({ error: 'AI response not valid JSON', raw }) }; }
 
     return {
