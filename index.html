@@ -236,7 +236,30 @@ header {
   margin-top: 12px;
 }
 .mode-hint a { color: var(--gold); cursor: pointer; }
-/* Security questions */
+/* Journey assistant steps */
+.type-btn {
+  flex: 1; padding: 18px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px; color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.9rem; font-weight: 500;
+  cursor: pointer; text-align: center;
+  transition: all 0.15s;
+}
+.type-btn:active, .type-btn.selected {
+  border-color: var(--gold);
+  background: rgba(212,175,95,0.12);
+  color: var(--gold2);
+}
+.confirm-stop {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 0; font-size: 0.82rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.confirm-stop:last-child { border-bottom: none; }
+.confirm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
+.confirm-dot.dep { background: var(--red); }
 .sq-block { margin-bottom: 13px; }
 .sq-block select {
   width: 100%; padding: 11px 13px;
@@ -499,26 +522,84 @@ header {
   <div class="sheet">
     <div class="sheet-header">
       <span class="sheet-title" id="journey-title">New Journey</span>
-      <button class="close-btn" onclick="close_('ov-journey')">✕</button>
+      <button class="close-btn" onclick="close_('ov-journey');resetJourney()">✕</button>
     </div>
-    <div class="sheet-body">
-      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;line-height:1.65;">
-        Paste your cruise or travel itinerary below. Ports, dates and trip name are extracted automatically.
-      </p>
-      <div class="field">
-        <label>Trip Name</label>
-        <input type="text" id="j-name" placeholder="Auto-filled from itinerary" autocomplete="off">
+    <div class="sheet-body" id="journey-body">
+
+      <!-- Step 1: Past or Future -->
+      <div id="step-type">
+        <p style="font-size:0.88rem;color:var(--muted);margin-bottom:20px;line-height:1.6;">Is this a past or future journey?</p>
+        <div style="display:flex;gap:12px">
+          <button class="type-btn" id="btn-past" onclick="selectType('past')">
+            <div style="font-size:1.8rem;margin-bottom:6px">📸</div>
+            <div>Past Journey</div>
+            <div style="font-size:0.72rem;opacity:0.6;margin-top:3px">I've already been</div>
+          </button>
+          <button class="type-btn" id="btn-future" onclick="selectType('future')">
+            <div style="font-size:1.8rem;margin-bottom:6px">✈️</div>
+            <div>Future Journey</div>
+            <div style="font-size:0.72rem;opacity:0.6;margin-top:3px">Coming up</div>
+          </button>
+        </div>
       </div>
-      <div class="field">
-        <label>Paste Itinerary</label>
-        <textarea id="j-text" rows="11"
-          placeholder="Paste any format, e.g.:&#10;&#10;Day 1  Sun, Nov 27, 2022  Cape Liberty – Depart&#10;Day 2  Mon, Nov 28, 2022  At Sea&#10;Day 3  Tue, Nov 29, 2022  Nassau&#10;Day 8  Sun, Dec 4, 2022   Cape Liberty – Return&#10;&#10;At Sea days are skipped automatically."></textarea>
+
+      <!-- Step 2: Search fields -->
+      <div id="step-search" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div id="journey-type-badge" style="font-size:0.72rem;padding:4px 10px;border-radius:20px;background:rgba(212,175,95,0.15);border:1px solid var(--border);color:var(--gold2)"></div>
+          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="resetJourney()">← Change</a>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6;">Tell me a little about your trip — I'll find the itinerary for you.</p>
+
+        <div class="field">
+          <label>Ship Name</label>
+          <input type="text" id="j-ship" placeholder="e.g. Independence of the Seas" autocomplete="off" autocorrect="off">
+        </div>
+        <div class="field">
+          <label>Departure Date</label>
+          <input type="date" id="j-date">
+        </div>
+        <div class="field">
+          <label>Departure Port (optional)</label>
+          <input type="text" id="j-port" placeholder="e.g. Miami, Cape Liberty" autocomplete="off" autocorrect="off">
+        </div>
+
+        <div class="status-msg" id="j-status"></div>
+        <div style="display:flex;gap:10px">
+          <button class="save-btn" id="j-search" style="flex:2">🔍 Find My Trip</button>
+        </div>
+        <div style="text-align:center;margin-top:10px">
+          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="showPaste()">Paste itinerary manually instead →</a>
+        </div>
       </div>
-      <div class="status-msg" id="j-status"></div>
-      <button class="save-btn" id="j-save">✨ Create Journey</button>
-      <button class="save-btn" id="j-ai" style="margin-top:8px;background:rgba(212,175,95,0.12);border:1px solid var(--border);color:var(--gold2);font-weight:500;font-size:0.88rem;">
-        🤖 Use AI to Parse (smarter)
-      </button>
+
+      <!-- Step 3: Confirm result -->
+      <div id="step-confirm" style="display:none">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">Is this your trip?</p>
+        <div id="confirm-card" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px"></div>
+        <div style="display:flex;gap:10px">
+          <button class="save-btn" id="btn-confirm-yes" style="flex:2;background:var(--gold)">✅ Yes, that's it!</button>
+          <button class="save-btn" id="btn-confirm-no" style="flex:1;background:rgba(224,90,58,0.15);border:1px solid rgba(224,90,58,0.3);color:var(--red)">No</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Paste fallback -->
+      <div id="step-paste" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="showSearch()">← Back to search</a>
+        </div>
+        <div class="field">
+          <label>Trip Name</label>
+          <input type="text" id="j-name" placeholder="Auto-filled from itinerary" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Paste Itinerary</label>
+          <textarea id="j-text" rows="10" placeholder="Paste any format, e.g.:&#10;&#10;Day 1  Sun, Nov 27  Cape Liberty – Depart&#10;Day 3  Tue, Nov 29  Nassau&#10;Day 8  Sun, Dec 4   Cape Liberty – Return&#10;&#10;At Sea days are skipped automatically."></textarea>
+        </div>
+        <div class="status-msg" id="j-paste-status"></div>
+        <button class="save-btn" id="j-save">✨ Create Journey</button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1200,115 +1281,157 @@ $('cb-all').addEventListener('change',function(){
   saveTrips(); updateStats(); renderTrips();
 });
 
-// ── New Journey ───────────────────────────────────────────────────────────────
-$('j-save').addEventListener('click', () => {
-  const text=$('j-text').value.trim();
-  const nameOverride=$('j-name').value.trim();
-  const status=$('j-status');
+// ── Journey Assistant ─────────────────────────────────────────────────────────
+let journeyType = '';
+let pendingTrip = null;
 
-  if(!text && editIdx<0){status.style.color='#e0954a';status.textContent='⚠️ Paste an itinerary to get started.';return;}
+function resetJourney() {
+  journeyType = ''; pendingTrip = null;
+  $('step-type').style.display = '';
+  $('step-search').style.display = 'none';
+  $('step-confirm').style.display = 'none';
+  $('step-paste').style.display = 'none';
+  if($('j-ship')) $('j-ship').value = '';
+  if($('j-date')) $('j-date').value = '';
+  if($('j-port')) $('j-port').value = '';
+  $('j-status').textContent = '';
+  if($('j-name')) $('j-name').value = '';
+  if($('j-text')) $('j-text').value = '';
+  ['btn-past','btn-future'].forEach(id => { const el=$(id); if(el) el.classList.remove('selected'); });
+}
 
-  let stops=[], tripName=nameOverride;
+window.selectType = function(type) {
+  journeyType = type;
+  const btn = $(type === 'past' ? 'btn-past' : 'btn-future');
+  if(btn) btn.classList.add('selected');
+  $('journey-type-badge').textContent = type === 'past' ? '📸 Past Journey' : '✈️ Future Journey';
+  setTimeout(() => {
+    $('step-type').style.display = 'none';
+    $('step-search').style.display = '';
+  }, 200);
+};
 
-  if(text){
-    const parsed=parseItinerary(text);
-    if(!parsed.stops||parsed.stops.length<2){
-      status.style.color='var(--red)';
-      status.textContent='❌ No ports found — check the format and try again.';
-      return;
-    }
-    stops=parsed.stops.map(s=>({...s, coords:resolveCoords(s.city)||null}));
-    if(!tripName) tripName=parsed.tripName||(stops[0].city+' → '+stops[stops.length-1].city);
-  } else if(editIdx>=0){
-    // Editing without new text — keep existing stops
-    stops=trips[editIdx].stops;
-    if(!tripName) tripName=trips[editIdx].name;
+window.showPaste = function() {
+  $('step-search').style.display = 'none';
+  $('step-paste').style.display = '';
+};
+
+window.showSearch = function() {
+  $('step-paste').style.display = 'none';
+  $('step-search').style.display = '';
+};
+
+$('j-search').addEventListener('click', async () => {
+  const ship = $('j-ship').value.trim();
+  const date = $('j-date').value;
+  const port = $('j-port').value.trim();
+  const status = $('j-status');
+
+  if (!ship && !date) {
+    status.style.color = '#e0954a';
+    status.textContent = '⚠️ Enter at least a ship name or departure date.';
+    return;
   }
 
-  if(stops.length<2){status.style.color='var(--red)';status.textContent='❌ Need at least 2 stops.';return;}
-
-  const trip={name:tripName, stops, visible:true};
-  if(editIdx>=0){trips[editIdx]=trip;}
-  else{trips.push(trip);}
-  editIdx=-1;
-  saveTrips(); updateStats(); renderTrips();
-
-  status.style.color='#7ec87e';
-  status.textContent=`✅ ${stops.length} stops saved!`;
-
-  // Fly to first stop
-  const first=stops[0];
-  if(first?.coords){rotLon=-first.coords[1];rotLat=-first.coords[0]*.7;spinning=false;}
-
-  setTimeout(()=>{
-    close_('ov-journey');
-    $('j-name').value=''; $('j-text').value=''; $('j-status').textContent='';
-    editIdx=-1;
-  }, 1000);
-});
-
-// ── AI Parse button ───────────────────────────────────────────────────────────
-$('j-ai').addEventListener('click', async () => {
-  const text = $('j-text').value.trim();
-  const status = $('j-status');
-  if (!text) { status.style.color='#e0954a'; status.textContent='⚠️ Paste an itinerary first.'; return; }
-
-  $('j-ai').disabled = true;
-  $('j-save').disabled = true;
   status.style.color = 'var(--gold2)';
-  status.textContent = '🤖 AI is reading your itinerary…';
+  status.textContent = '🔍 Searching for your itinerary…';
+  $('j-search').disabled = true;
+
+  const query = [
+    ship ? `Ship: ${ship}` : '',
+    date ? `Departure date: ${date}` : '',
+    port ? `Departure port: ${port}` : '',
+    `Journey type: ${journeyType}`
+  ].filter(Boolean).join('\n');
 
   try {
     const res = await fetch('/.netlify/functions/parse-itinerary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text: query, mode: 'search' })
     });
     const parsed = await res.json();
 
     if (!parsed.stops || parsed.stops.length < 2) {
       status.style.color = 'var(--red)';
-      status.textContent = '❌ AI could not find stops. Try the smart parser instead.';
-      $('j-ai').disabled = false; $('j-save').disabled = false;
+      status.textContent = "❌ Couldn't find that trip. Add more details or paste the itinerary below.";
+      $('j-search').disabled = false;
       return;
     }
 
-    // Fill in name if blank
-    if (!$('j-name').value.trim() && parsed.tripName) $('j-name').value = parsed.tripName;
+    pendingTrip = {
+      name: parsed.tripName || (ship + (date ? ' — '+fmtDate(date) : '')).trim(),
+      stops: parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null })),
+      visible: true
+    };
 
-    // Save the trip
-    const nameOverride = $('j-name').value.trim();
-    const stops = parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null }));
-    const tripName = nameOverride || parsed.tripName || (stops[0].city + ' → ' + stops[stops.length-1].city);
-    const trip = { name: tripName, stops, visible: true };
+    const s = pendingTrip.stops;
+    $('confirm-card').innerHTML = `
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold);margin-bottom:12px">${pendingTrip.name}</div>
+      ${s.map((st,si) => `<div class="confirm-stop"><div class="confirm-dot${si===0?' dep':''}"></div><span>${st.city}</span><span style="margin-left:auto;font-size:0.7rem;color:var(--muted)">${fmtDate(st.date)}</span></div>`).join('')}
+    `;
 
-    if (editIdx >= 0) { trips[editIdx] = trip; } else { trips.push(trip); }
-    editIdx = -1;
-    saveTrips(); updateStats(); renderTrips();
-
-    status.style.color = '#7ec87e';
-    status.textContent = `✅ AI found ${stops.length} stops!`;
-
-    const first = stops[0];
-    if (first?.coords) { rotLon = -first.coords[1]; rotLat = -first.coords[0] * .7; spinning = false; }
-
-    setTimeout(() => {
-      close_('ov-journey');
-      $('j-name').value = ''; $('j-text').value = ''; $('j-status').textContent = '';
-      $('j-ai').disabled = false; $('j-save').disabled = false;
-      editIdx = -1;
-    }, 1000);
+    status.textContent = '';
+    $('step-search').style.display = 'none';
+    $('step-confirm').style.display = '';
+    $('j-search').disabled = false;
 
   } catch(err) {
     status.style.color = 'var(--red)';
-    status.textContent = '❌ AI unavailable — tap "Create Journey" to use smart parser.';
-    $('j-ai').disabled = false; $('j-save').disabled = false;
+    status.textContent = '❌ Search unavailable. Please paste your itinerary below.';
+    $('j-search').disabled = false;
   }
 });
+
+$('btn-confirm-yes').addEventListener('click', () => {
+  if (!pendingTrip) return;
+  if (editIdx >= 0) { trips[editIdx] = pendingTrip; } else { trips.push(pendingTrip); }
+  editIdx = -1;
+  saveTrips(); updateStats(); renderTrips();
+  const first = pendingTrip.stops[0];
+  if (first?.coords) { rotLon = -first.coords[1]; rotLat = -first.coords[0] * .7; spinning = false; }
+  close_('ov-journey'); resetJourney();
+});
+
+$('btn-confirm-no').addEventListener('click', () => {
+  $('step-confirm').style.display = 'none';
+  $('step-search').style.display = '';
+  $('j-status').style.color = 'var(--gold2)';
+  $('j-status').textContent = "Let's try again — add more details or try the departure port.";
+  pendingTrip = null;
+});
+
+// Paste fallback save
+$('j-save').addEventListener('click', () => {
+  const text = $('j-text').value.trim();
+  const nameOverride = $('j-name').value.trim();
+  const status = $('j-paste-status');
+  if (!text && editIdx < 0) { status.style.color='#e0954a'; status.textContent='⚠️ Paste an itinerary to get started.'; return; }
+  let stops = [], tripName = nameOverride;
+  if (text) {
+    const parsed = parseItinerary(text);
+    if (!parsed.stops || parsed.stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ No ports found.'; return; }
+    stops = parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null }));
+    if (!tripName) tripName = parsed.tripName || (stops[0].city + ' → ' + stops[stops.length-1].city);
+  } else if (editIdx >= 0) {
+    stops = trips[editIdx].stops;
+    if (!tripName) tripName = trips[editIdx].name;
+  }
+  if (stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ Need at least 2 stops.'; return; }
+  const trip = { name: tripName, stops, visible: true };
+  if (editIdx >= 0) { trips[editIdx] = trip; } else { trips.push(trip); }
+  editIdx = -1;
+  saveTrips(); updateStats(); renderTrips();
+  status.style.color = '#7ec87e'; status.textContent = `✅ ${stops.length} stops saved!`;
+  const first = stops[0];
+  if (first?.coords) { rotLon = -first.coords[1]; rotLat = -first.coords[0] * .7; spinning = false; }
+  setTimeout(() => { close_('ov-journey'); resetJourney(); }, 1000);
+});
+
 $('btn-trips').addEventListener('click',()=>{renderTrips();open_('ov-trips');});
 $('btn-add').addEventListener('click',()=>{
-  editIdx=-1; $('journey-title').textContent='New Journey';
-  $('j-name').value=''; $('j-text').value=''; $('j-status').textContent='';
+  editIdx=-1;
+  resetJourney();
   open_('ov-journey');
 });
 
