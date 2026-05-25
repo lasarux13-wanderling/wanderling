@@ -995,7 +995,40 @@ let W,H,R,cx,cy;
 let rotLon=-20, rotLat=-10, zoom=1;
 let dragging=false, ds, dr, pinchDist=null;
 let worldData=null, spinning=true;
-const COLORS=['#d4af5f','#e05a3a','#4a9ebb','#7ec87e','#c97bbb','#e0954a','#4a7ec8'];
+// ── Month-based color system ─────────────────────────────────────────────────
+const MONTH_COLORS = {
+  1:  { h: 200, s: 70 },  // Jan — ice blue
+  2:  { h: 340, s: 65 },  // Feb — rose pink
+  3:  { h: 150, s: 60 },  // Mar — mint green
+  4:  { h: 65,  s: 70 },  // Apr — spring yellow
+  5:  { h: 195, s: 75 },  // May — sky blue
+  6:  { h: 20,  s: 80 },  // Jun — coral orange
+  7:  { h: 45,  s: 85 },  // Jul — bright gold
+  8:  { h: 35,  s: 80 },  // Aug — warm amber
+  9:  { h: 25,  s: 75 },  // Sep — burnt orange
+  10: { h: 15,  s: 70 },  // Oct — deep rust
+  11: { h: 80,  s: 55 },  // Nov — olive green
+  12: { h: 355, s: 75 },  // Dec — crimson red
+};
+
+function getTripColor(trip) {
+  // Get departure month from first stop
+  const firstDate = trip.stops?.[0]?.date;
+  const month = firstDate ? parseInt(firstDate.slice(5,7)) : 0;
+  const mc = MONTH_COLORS[month] || { h: 45, s: 70 };
+
+  // Get departure year to determine age
+  const year = firstDate ? parseInt(firstDate.slice(0,4)) : new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - year; // 0 = this year, 1 = last year, etc.
+
+  // Brightness: recent = bright (70-85%), older = lighter (45-60%)
+  const lightness = Math.max(45, Math.min(85, 82 - (age * 10)));
+  // Saturation: recent = vivid, older = more muted
+  const saturation = Math.max(30, mc.s - (age * 12));
+
+  return `hsl(${mc.h}, ${saturation}%, ${lightness}%)`;
+}
 
 function resize() {
   const dpr = devicePixelRatio||1;
@@ -1043,7 +1076,7 @@ function draw() {
   // Trip arcs and dots
   trips.forEach((t,ti) => {
     if (!t.visible || !t.stops?.length) return;
-    const col = COLORS[ti%COLORS.length];
+    const col = getTripColor(t);
     const stops = t.stops;
 
     // First assign estimated coords to sea days by interpolating between ports
@@ -1364,7 +1397,7 @@ function renderTrips(){
   });
 
   list.innerHTML=sorted.map(({t,i})=>{
-    const col=COLORS[i%COLORS.length];
+    const col=getTripColor(t);
     const s=t.stops||[];
     const sub=`${s.length} stop${s.length!==1?'s':''}`;
     return `<div class="trip-card${t.visible?' visible':''}" id="tc${i}">
