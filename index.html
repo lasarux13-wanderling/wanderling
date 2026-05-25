@@ -778,7 +778,6 @@ function loadTrips(username) {
 }
 
 function saveTrips() {
-  arcCache.clear(); // Clear cached arcs so they recalculate with new trips
   const data = JSON.stringify(trips);
   // Save under guest key always so no-login use persists
   localStorage.setItem('wm_t_guest', data);
@@ -1070,7 +1069,7 @@ function draw() {
       // Skip zero-length arcs (same location)
       const dist = Math.hypot(a.coords[0]-b.coords[0], a.coords[1]-b.coords[1]);
       if (dist < 0.01) continue;
-      drawArc(p, gp, a.coords[1],a.coords[0], b.coords[1],b.coords[0], col, `${ti}_${i}`);
+      drawArc(p, gp, a.coords[1],a.coords[0], b.coords[1],b.coords[0], col);
     }
 
     // Draw dots
@@ -1092,52 +1091,14 @@ function draw() {
   });
 }
 
-// Cache arc water-only coordinates per trip
-const arcCache = new Map();
-
-function getArcCoords(lon1,lat1,lon2,lat2,tripKey) {
-  const key = `${tripKey}_${lon1}_${lat1}_${lon2}_${lat2}`;
-  if (arcCache.has(key)) return arcCache.get(key);
-
+function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
   const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
-  const N = 120;
-  const segments = []; // array of water-only polylines
-  let current = [];
-
-  for (let i=0; i<=N; i++) {
-    const [lon,lat] = interp(i/N);
-    const overLand = worldData ? d3.geoContains(worldData.land, [lon,lat]) : false;
-    if (!overLand) {
-      current.push([lon,lat]);
-    } else {
-      if (current.length > 1) segments.push(current);
-      current = [];
-    }
-  }
-  if (current.length > 1) segments.push(current);
-
-  arcCache.set(key, segments);
-  return segments;
-}
-
-function isOverLand(lon, lat) {
-  if (!worldData) return false;
-  try { return d3.geoContains(worldData.land, [lon, lat]); } catch { return false; }
-}
-
-function drawArc(p,gp,lon1,lat1,lon2,lat2,color,tripKey) {
-  const segments = getArcCoords(lon1,lat1,lon2,lat2,tripKey||'');
-
+  const N = Math.max(60, Math.round(60*zoom));
+  const line = {type:'LineString', coordinates:Array.from({length:N+1},(_,i)=>interp(i/N))};
   ctx.save();
   ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=.85;
   ctx.setLineDash([6,5]);
-
-  for (const seg of segments) {
-    if (seg.length < 2) continue;
-    const line = {type:'LineString', coordinates: seg};
-    ctx.beginPath(); gp(line); ctx.stroke();
-  }
-
+  ctx.beginPath(); gp(line); ctx.stroke();
   ctx.setLineDash([]);
   ctx.restore();
 }
@@ -1150,11 +1111,18 @@ function drawDot(p,lon,lat,color,r) {
   ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.lineWidth=1; ctx.stroke();
 }
 
+let lastRot = null, lastZoom = null, dirty = true;
 let raf;
 function loop() {
-  if (spinning && !dragging) rotLon+=.18;
-  draw();
-  raf=requestAnimationFrame(loop);
+  const rotChanged = rotLon !== lastRot || rotLat !== lastRot || zoom !== lastZoom;
+  if (spinning || dragging || dirty || rotChanged) {
+    if (spinning && !dragging) rotLon += .18;
+    draw();
+    lastRot = rotLon;
+    lastZoom = zoom;
+    dirty = false;
+  }
+  raf = requestAnimationFrame(loop);
 }
 
 // Touch / mouse drag
