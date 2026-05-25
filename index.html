@@ -1074,6 +1074,7 @@ function draw() {
   ctx.strokeStyle='rgba(212,175,95,.18)'; ctx.lineWidth=1.2; ctx.stroke();
 
   // Trip arcs and dots
+  labelHitAreas.length = 0; // clear each frame
   trips.forEach((t,ti) => {
     if (!t.visible || !t.stops?.length) return;
     const col = getTripColor(t);
@@ -1146,21 +1147,49 @@ function draw() {
         if (!pt) return;
 
         ctx.save();
-        ctx.font = `bold 9px sans-serif`;
-        ctx.fillStyle = 'rgba(232,228,218,0.95)';
-        ctx.strokeStyle = 'rgba(7,9,15,0.9)';
-        ctx.lineWidth = 3;
-        ctx.textAlign = 'left';
-        // Offset label to avoid dot
+        ctx.font = 'bold 9px sans-serif';
+        const metrics = ctx.measureText(label);
+        const lw = metrics.width;
+        const lh = 14;
         const tx = pt[0] + 9;
         const ty = pt[1] - 8;
+
+        // Background pill to make it look tappable
+        ctx.fillStyle = 'rgba(7,9,15,0.72)';
+        ctx.beginPath();
+        ctx.roundRect(tx-3, ty-lh+3, lw+8, lh+2, 4);
+        ctx.fill();
+
+        // Underline to show it's tappable
+        ctx.fillStyle = 'rgba(212,175,95,0.95)';
+        ctx.strokeStyle = 'rgba(7,9,15,0.9)';
+        ctx.lineWidth = 2;
         ctx.strokeText(label, tx, ty);
         ctx.fillText(label, tx, ty);
+
+        // Underline
+        ctx.strokeStyle = 'rgba(212,175,95,0.5)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty+2);
+        ctx.lineTo(tx+lw, ty+2);
+        ctx.stroke();
+
         ctx.restore();
+
+        // Store hit area for tap detection
+        labelHitAreas.push({
+          x: tx-3, y: ty-lh+3,
+          w: lw+8, h: lh+4,
+          date: s.date, city: s.city
+        });
       }
     });
   });
 }
+
+// Store label hit areas for tap detection
+const labelHitAreas = [];
 
 function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
   const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
@@ -1234,14 +1263,21 @@ canvas.addEventListener('touchend', e=>{
 });
 
 function handleGlobeClick(cx, cy) {
-  // Account for canvas position and device pixel ratio
   const rect = canvas.getBoundingClientRect();
   const x = cx - rect.left;
   const y = cy - rect.top;
 
+  // Check label hit areas first (easier to tap than dots)
+  for (const hit of labelHitAreas) {
+    if (x >= hit.x && x <= hit.x+hit.w && y >= hit.y && y <= hit.y+hit.h) {
+      window.open(`https://photos.google.com/search/${hit.date}`, '_blank');
+      return;
+    }
+  }
+
+  // Fall back to dot hit detection
   const p = proj();
   const HIT = 20;
-
   for (const t of trips) {
     if (!t.visible || !t.stops?.length) continue;
     for (const s of t.stops) {
