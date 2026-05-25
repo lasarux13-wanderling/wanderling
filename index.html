@@ -1193,7 +1193,26 @@ function parseItinerary(text) {
     }
   }
 
-  // ── Handle run-together "Day X (Month DD): Port." format ──────────────────
+  // ── Handle run-together numbered table: "1Thu, Feb 5Baltimore, MD2Fri, Feb 6At Sea..." ──
+  if (/\d+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+[A-Za-z]/i.test(text)) {
+    // Split on day numbers followed by weekday
+    const rowParts = text.split(/(?=\d+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun))/i).filter(Boolean);
+    const tableStops = [];
+    for (const part of rowParts) {
+      // Extract: number + weekday + date + city
+      const m = part.match(/^(\d+)\s*(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+([A-Za-z]+\s+\d+)\s*(.+)$/i);
+      if (!m) continue;
+      const date = parseDate(m[2] + ', ' + new Date().getFullYear());
+      let city = m[3].trim();
+      city = city.replace(/[–—-]\s*(depart|return|arrive).*/i, '');
+      city = city.replace(/\s*\d{1,2}:\d{2}\s*[AP]M.*/i, '');
+      city = city.replace(/\.\s*$/, '').trim();
+      const isSeaDay = isSea(city);
+      const finalCity = isSeaDay ? 'At Sea' : city;
+      if (finalCity && date) tableStops.push({ city: finalCity, date });
+    }
+    if (tableStops.length >= 2) return { tripName, stops: tableStops };
+  }
   // e.g. "Day 1 (May 2): Cape Liberty.Day 2 (May 3): At Sea.Day 3 (May 4): Bermuda."
   if (/Day \d+\s*[\(\[]/i.test(text)) {
     const dayParts = text.split(/(?=Day \d+\s*[\(\[])/i).filter(Boolean);
