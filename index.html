@@ -586,19 +586,32 @@ header {
 
       <!-- Step 4: Paste fallback -->
       <div id="step-paste" style="display:none">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="showSearch()">← Back to search</a>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div id="journey-type-badge-paste" style="font-size:0.72rem;padding:4px 10px;border-radius:20px;background:rgba(212,175,95,0.15);border:1px solid var(--border);color:var(--gold2)"></div>
+          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="resetJourney()">← Change</a>
         </div>
+
+        <!-- Note shown for future journeys -->
+        <div id="paste-future-note" style="display:none;background:rgba(74,158,187,0.08);border:1px solid rgba(74,158,187,0.22);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+          <div style="font-size:0.82rem;color:#7dd4f0;line-height:1.6;">
+            <strong style="display:block;margin-bottom:4px">📋 Paste your booking confirmation</strong>
+            Copy your itinerary from your cruise confirmation email, the cruise line's app, or their website — then paste it below. We'll extract all ports and dates automatically!
+          </div>
+        </div>
+
         <div class="field">
-          <label>Trip Name</label>
+          <label>Trip Name (optional)</label>
           <input type="text" id="j-name" placeholder="Auto-filled from itinerary" autocomplete="off">
         </div>
         <div class="field">
           <label>Paste Itinerary</label>
-          <textarea id="j-text" rows="10" placeholder="Paste any format, e.g.:&#10;&#10;Day 1  Sun, Nov 27  Cape Liberty – Depart&#10;Day 3  Tue, Nov 29  Nassau&#10;Day 8  Sun, Dec 4   Cape Liberty – Return&#10;&#10;At Sea days are skipped automatically."></textarea>
+          <textarea id="j-text" rows="10" placeholder="Paste your itinerary here..."></textarea>
         </div>
         <div class="status-msg" id="j-paste-status"></div>
         <button class="save-btn" id="j-save">✨ Create Journey</button>
+        <div style="text-align:center;margin-top:10px" id="back-to-search-link">
+          <a style="font-size:0.75rem;color:var(--muted);cursor:pointer" onclick="showSearch()">← Search by ship name instead</a>
+        </div>
       </div>
 
     </div>
@@ -1306,9 +1319,32 @@ window.selectType = function(type) {
   const btn = $(type === 'past' ? 'btn-past' : 'btn-future');
   if(btn) btn.classList.add('selected');
   $('journey-type-badge').textContent = type === 'past' ? '📸 Past Journey' : '✈️ Future Journey';
+
   setTimeout(() => {
     $('step-type').style.display = 'none';
-    $('step-search').style.display = '';
+    if (type === 'future') {
+      // Future journeys go straight to paste
+      $('step-paste').style.display = '';
+      $('step-search').style.display = 'none';
+      $('j-text').placeholder = 'Paste your booking confirmation here...\n\nYou can copy it from:\n• Your cruise confirmation email\n• Royal Caribbean / Carnival app\n• The cruise line\'s website\n\nWe\'ll extract all ports and dates automatically!';
+      const pasteNote = document.getElementById('paste-future-note');
+      if (pasteNote) pasteNote.style.display = '';
+      const backLink = document.getElementById('back-to-search-link');
+      if (backLink) backLink.style.display = 'none';
+      const pasteBadge = document.getElementById('journey-type-badge-paste');
+      if (pasteBadge) pasteBadge.textContent = '✈️ Future Journey';
+    } else {
+      // Past journeys use AI search
+      $('step-search').style.display = '';
+      $('step-paste').style.display = 'none';
+      $('j-text').placeholder = 'Paste your itinerary here...';
+      const pasteNote = document.getElementById('paste-future-note');
+      if (pasteNote) pasteNote.style.display = 'none';
+      const backLink = document.getElementById('back-to-search-link');
+      if (backLink) backLink.style.display = '';
+      const pasteBadge = document.getElementById('journey-type-badge-paste');
+      if (pasteBadge) pasteBadge.textContent = '📸 Past Journey';
+    }
   }, 200);
 };
 
@@ -1351,7 +1387,23 @@ $('j-search').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: query, mode: 'search' })
     });
-    const parsed = await res.json();
+
+    const rawText = await res.text();
+    let parsed;
+    try { parsed = JSON.parse(rawText); }
+    catch {
+      status.style.color = 'var(--red)';
+      status.textContent = `❌ Server error (${res.status}): ${rawText.slice(0,120)}`;
+      $('j-search').disabled = false;
+      return;
+    }
+
+    if (parsed.error) {
+      status.style.color = 'var(--red)';
+      status.textContent = `❌ ${parsed.error}`;
+      $('j-search').disabled = false;
+      return;
+    }
 
     if (!parsed.stops || parsed.stops.length < 2) {
       status.style.color = 'var(--red)';
