@@ -1092,15 +1092,52 @@ function draw() {
 }
 
 function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
-  const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
-  const N = Math.max(80, Math.round(80*zoom));
-  const line = {type:'LineString', coordinates:Array.from({length:N+1},(_,i)=>interp(i/N))};
+  // Add coastal waypoints for common routes to avoid drawing over land
+  const waypoints = getWaypoints(lat1,lon1,lat2,lon2);
+  const segments = [[lon1,lat1], ...waypoints, [lon2,lat2]];
+
   ctx.save();
   ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=.85;
   ctx.setLineDash([6,5]);
-  ctx.beginPath(); gp(line); ctx.stroke();
+
+  for (let i=0; i<segments.length-1; i++) {
+    const [slon1,slat1] = segments[i];
+    const [slon2,slat2] = segments[i+1];
+    const interp = d3.geoInterpolate([slon1,slat1],[slon2,slat2]);
+    const N = Math.max(40, Math.round(60*zoom));
+    const line = {type:'LineString', coordinates:Array.from({length:N+1},(_,j)=>interp(j/N))};
+    ctx.beginPath(); gp(line); ctx.stroke();
+  }
+
   ctx.setLineDash([]);
   ctx.restore();
+}
+
+function getWaypoints(lat1,lon1,lat2,lon2) {
+  // US East Coast southbound — add offshore waypoint to stay in water
+  const isEastCoast = lon1 > -82 && lon1 < -70 && lon2 > -82 && lon2 < -70;
+  const isNorthSouth = Math.abs(lat1-lat2) > 3 && Math.abs(lon1-lon2) < 8;
+
+  if (isEastCoast && isNorthSouth) {
+    // Route via offshore point to avoid land
+    const midLat = (lat1+lat2)/2;
+    const offshoreWp = [Math.min(lon1,lon2)-2.5, midLat]; // push 2.5° east of land
+    return [offshoreWp];
+  }
+
+  // Caribbean routing — avoid cutting through Florida/islands
+  const toCaribbean = lat2 < 27 && lon2 > -80 && lat1 > 35;
+  if (toCaribbean) {
+    return [[-74, 30], [-76, 25]]; // route via open Atlantic
+  }
+
+  // Gulf Coast routing
+  const isGulf = lon1 < -85 || lon2 < -85;
+  if (isGulf && Math.abs(lat1-lat2) > 2) {
+    return [[Math.min(lon1,lon2)+1, (lat1+lat2)/2]];
+  }
+
+  return [];
 }
 
 function drawDot(p,lon,lat,color,r) {
