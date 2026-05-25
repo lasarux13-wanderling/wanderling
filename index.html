@@ -1105,8 +1105,10 @@ function draw() {
         }
 
         const dateStr = s.date ? s.date.slice(5).replace('-','/') + '/' + s.date.slice(2,4) : '';
-        const parts = [shipName, s.city, dateStr].filter(Boolean);
-        const label = parts.join('  ·  ');
+        // Shorten city: take first part before comma if long
+        const cityShort = s.city.includes(',') ? s.city.split(',')[0].trim() : s.city;
+        const parts = [shipName, cityShort, dateStr].filter(Boolean);
+        const label = parts.join(' · ');
 
         if (!pt) return;
 
@@ -1263,7 +1265,7 @@ function parseItinerary(text) {
       const finalCity = isSeaDay ? 'At Sea' : city;
       if (finalCity && date) tableStops.push({ city: finalCity, date });
     }
-    if (tableStops.length >= 2) return { tripName, stops: tableStops };
+    if (tableStops.length >= 2) return { tripName, shipName, stops: tableStops };
   }
   // e.g. "Day 1 (May 2): Cape Liberty.Day 2 (May 3): At Sea.Day 3 (May 4): Bermuda."
   if (/Day \d+\s*[\(\[]/i.test(text)) {
@@ -1290,7 +1292,7 @@ function parseItinerary(text) {
       city = city.replace(/\.\s*$/, '').replace(/^in\s+/i,'').trim();
       if (city && city.length > 2) dayStops.push({ city, date });
     }
-    if (dayStops.length >= 2) return { tripName, stops: dayStops };
+    if (dayStops.length >= 2) return { tripName, shipName, stops: dayStops };
   }
 
   for(const line of lines){
