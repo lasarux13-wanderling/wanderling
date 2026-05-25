@@ -19,76 +19,60 @@ exports.handler = async function(event) {
   const dateRaw = (lines.find(l => l.startsWith('Departure date:')) || '').replace('Departure date:', '').trim();
   const port = (lines.find(l => l.startsWith('Departure port:')) || '').replace('Departure port:', '').trim();
 
-  const systemPrompt = mode === 'search'
-    ? `You are a cruise itinerary database. Output ONLY a raw JSON object. No explanation, no markdown, no text before or after. Just the JSON.
-
-Format:
-{"tripName":"string","stops":[{"city":"string","date":"YYYY-MM-DD"}]}
-
-Rules:
-- stops = only actual port stops, no At Sea days
-- first stop = departure port + departure date
-- last stop = return port + return date  
-- all dates in YYYY-MM-DD format
-- if unknown return: {"tripName":"","stops":[]}`
-    : `Extract itinerary ports. Output ONLY raw JSON, no markdown, no text:
-{"tripName":"string","stops":[{"city":"string","date":"YYYY-MM-DD"}]}
-Skip At Sea days. YYYY-MM-DD dates only.`;
-
   const userMessage = mode === 'search'
-    ? `Cruise: ${ship}\nDeparture date: ${dateRaw}${port ? `\nDeparture port: ${port}` : ''}`
-    : text;
-
-  console.log('Groq request:', userMessage.slice(0,100));
+    ? `What ports does the ${ship} visit on its cruise departing ${dateRaw}${port ? ` from ${port}` : ''}? Return as JSON: {"tripName":"string","stops":[{"city":"string","date":"YYYY-MM-DD"}]}`
+    : `Extract this itinerary as JSON {"tripName":"string","stops":[{"city":"string","date":"YYYY-MM-DD"}]} skipping At Sea days:\n${text}`;
 
   try {
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'mixtral-8x7b-32768',
         temperature: 0,
         max_tokens: 1000,
-        response_format: { type: 'json_object' }, // Force JSON output
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ]
+        messages: [{ role: 'user', content: userMessage }]
       })
     });
 
-    const gd = await groqRes.json();
-    const raw = gd.choices?.[0]?.message?.content || '';
-    console.log('Groq raw:', raw.slice(0, 500));
+    const groqText = await groqRes.text();
+    console.log('Groq HTTP status:', groqRes.status);
+    console.log('Groq full response:', groqText.slice(0, 800));
 
-    let parsed;
-    try {
-      // Try direct parse first
-      parsed = JSON.parse(raw.trim());
-    } catch {
-      // Try extracting JSON from surrounding text
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        try { parsed = JSON.parse(match[0]); }
-        catch(e) {
-          console.log('JSON extract failed:', match[0].slice(0,200));
-          return { statusCode: 500, body: JSON.stringify({ error: 'JSON parse failed', raw: raw.slice(0,300) }) };
-        }
-      } else {
-        console.log('No JSON found in:', raw.slice(0,300));
-        return { statusCode: 500, body: JSON.stringify({ error: 'No JSON in response', raw: raw.slice(0,300) }) };
-      }
+    let gd;
+    try { gd = JSON.parse(groqText); } catch {
+      return { statusCode: 500, body: JSON.stringify({ error: 'Groq response not JSON', raw: groqText.slice(0,300) }) };
     }
 
-    console.log('Stops found:', parsed.stops?.length, parsed.stops?.map(s=>s.city).join(', '));
+    if (gd.error) {
+      console.log('Groq API error:', JSON.stringify(gd.error));
+      return { statusCode: 500, body: JSON.stringify({ error: `Groq error: ${gd.error.message || JSON.stringify(gd.error)}` }) };
+    }
+
+    const raw = gd.choices?.[0]?.message?.content || '';
+    console.log('Groq content:', raw.slice(0, 600));
+
+    let parsed = null;
+    try { parsed = JSON.parse(raw.trim()); } catch {}
+    if (!parsed) {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) try { parsed = JSON.parse(match[0]); } catch {}
+    }
+
+    if (!parsed) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'Could not parse JSON', raw: raw.slice(0,300) }) };
+    }
+
+    console.log('Stops:', parsed.stops?.length, parsed.stops?.map(s=>s.city).join(', '));
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify(parsed)
     };
+
   } catch(err) {
-    console.log('Error:', err.message);
+    console.log('Fetch error:', err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
