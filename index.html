@@ -1,723 +1,1075 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wandermap</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap');
-    
-    :root {
-      --bg-dark: #0a0e1a;
-      --bg-darker: #050810;
-      --surface: #1a1f35;
-      --surface-light: #242b45;
-      --accent: #e8b55f;
-      --accent-light: #f5d89a;
-      --text: #e8e9ed;
-      --text-dim: #9fa1aa;
-      --border: rgba(232, 181, 95, 0.15);
-      --shadow: rgba(0, 0, 0, 0.4);
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Wandermap</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap');
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+/* ── Reset & Variables ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 50%, #0d1224 100%);
-      color: var(--text);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
+:root {
+  --bg:       #07090f;
+  --surface:  #0e1220;
+  --surface2: #161c2e;
+  --border:   rgba(212,175,95,0.18);
+  --gold:     #d4af5f;
+  --gold2:    #e8d4a0;
+  --red:      #e05a3a;
+  --blue:     #4a9ebb;
+  --text:     #e8e4da;
+  --muted:    rgba(232,228,218,0.45);
+  --safe-b:   env(safe-area-inset-bottom, 0px);
+}
 
-    .header {
-      padding: 2rem 2rem 1rem;
-      text-align: center;
-      position: relative;
-    }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  height: 100dvh;
+  overflow: hidden;
+}
 
-    .header h1 {
-      font-family: 'Lora', serif;
-      font-size: 2.5rem;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 0.5px;
-      margin-bottom: 0.5rem;
-    }
+/* ── Globe ──────────────────────────────────────────────────────────────── */
+#globe-wrap {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+}
+canvas { width: 100%; height: 100%; display: block; }
 
-    .header p {
-      color: var(--text-dim);
-      font-size: 0.95rem;
-    }
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 12px;
+  background: linear-gradient(to bottom, rgba(7,9,15,0.97) 55%, transparent);
+}
+.logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.5rem; font-weight: 600;
+  color: var(--gold); letter-spacing: 0.04em;
+}
+.header-right { display: flex; align-items: center; gap: 10px; }
+#journey-count {
+  font-size: 0.68rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+}
+#user-pill {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(212,175,95,0.1);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 10px 4px 4px;
+  cursor: pointer;
+}
+.user-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--gold); color: var(--bg);
+  font-size: 0.72rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.user-name { font-size: 0.78rem; color: var(--gold2); max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .controls {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-      padding: 1.5rem 2rem;
-      flex-wrap: wrap;
-    }
+/* ── Bottom Bar ──────────────────────────────────────────────────────────── */
+#bottom-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+  background: linear-gradient(to top, rgba(7,9,15,1) 60%, transparent);
+  padding: 12px 16px;
+  padding-bottom: calc(12px + var(--safe-b));
+  display: flex; flex-direction: column; gap: 8px;
+}
+.btn-row { display: flex; gap: 10px; }
+.btn {
+  border: none; border-radius: 12px;
+  font-family: 'Outfit', sans-serif; font-weight: 600;
+  font-size: 0.9rem; cursor: pointer; padding: 13px 0;
+  transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.78; }
+.btn-trips { flex: 1; background: rgba(212,175,95,0.1); border: 1px solid var(--border) !important; color: var(--gold2); }
+.btn-add   { flex: 2; background: var(--gold); color: var(--bg); }
+.btn-signout {
+  background: none; border: none;
+  color: rgba(224,90,58,0.65);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem; letter-spacing: 0.06em;
+  cursor: pointer; padding: 4px; text-align: center;
+}
 
-    button {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 0.95rem;
-      font-weight: 500;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
+/* ── Overlays ────────────────────────────────────────────────────────────── */
+.overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.65);
+  align-items: flex-end; justify-content: center;
+}
+.overlay.open { display: flex; }
 
-    button:hover {
-      background: var(--surface-light);
-      border-color: var(--accent);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px var(--shadow);
-    }
+.sheet {
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--border);
+  width: 100%; max-width: 560px;
+  max-height: 88dvh;
+  display: flex; flex-direction: column;
+  animation: slideUp 0.26s cubic-bezier(.2,.8,.4,1);
+  padding-bottom: var(--safe-b);
+}
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
 
-    button.primary {
-      background: linear-gradient(135deg, var(--accent) 0%, #d4a253 100%);
-      color: var(--bg-dark);
-      border: none;
-      font-weight: 600;
-    }
+.sheet-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sheet-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.2rem; font-weight: 600; color: var(--gold);
+}
+.close-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255,255,255,0.07); border: none;
+  color: var(--text); font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
 
-    button.primary:hover {
-      background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
-      transform: translateY(-2px) scale(1.02);
-    }
+.sheet-body {
+  overflow-y: auto; flex: 1;
+  padding: 16px 16px 20px;
+  -webkit-overflow-scrolling: touch;
+}
 
-    #globe-container {
-      width: 100%;
-      max-width: 800px;
-      height: 500px;
-      margin: 0 auto;
-      position: relative;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      background: radial-gradient(ellipse at center, rgba(26, 31, 53, 0.3) 0%, var(--bg-darker) 100%);
-    }
+/* ── Form Fields ─────────────────────────────────────────────────────────── */
+.field { margin-bottom: 14px; }
+.field label {
+  display: block; font-size: 0.68rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--gold2); opacity: 0.55; margin-bottom: 6px;
+}
+.field input, .field textarea {
+  width: 100%; padding: 12px 13px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 0.92rem;
+  outline: none; transition: border-color 0.2s;
+}
+.field input:focus, .field textarea:focus { border-color: var(--gold); }
+.field textarea { resize: vertical; line-height: 1.6; }
 
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(5, 8, 16, 0.85);
-      backdrop-filter: blur(8px);
-      z-index: 1000;
-      animation: fadeIn 0.3s ease;
-    }
+.save-btn {
+  width: 100%; padding: 15px;
+  background: var(--gold); border: none; border-radius: 12px;
+  color: var(--bg); font-family: 'Outfit', sans-serif;
+  font-weight: 700; font-size: 1rem; cursor: pointer;
+  margin-top: 4px; letter-spacing: 0.02em;
+  transition: opacity 0.15s;
+}
+.save-btn:active { opacity: 0.82; }
 
-    .modal-overlay.active {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+.status-msg {
+  font-size: 0.82rem; min-height: 26px;
+  margin-bottom: 8px; padding: 0 2px;
+}
 
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
+/* ── Login Screen ────────────────────────────────────────────────────────── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 35% 40%, #0d1628 0%, var(--bg) 70%);
+}
+#login-box {
+  width: 92%; max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 32px 24px 28px;
+  animation: slideUp 0.3s ease;
+}
+.login-logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2rem; font-weight: 600;
+  color: var(--gold); text-align: center;
+  margin-bottom: 4px;
+}
+.login-sub {
+  font-size: 0.72rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+  text-align: center; margin-bottom: 26px;
+}
+.login-err {
+  font-size: 0.8rem; color: var(--red);
+  text-align: center; min-height: 20px; margin-bottom: 10px;
+}
+.login-btn {
+  width: 100%; padding: 14px; border: none; border-radius: 11px;
+  font-family: 'Outfit', sans-serif; font-weight: 600;
+  font-size: 0.92rem; cursor: pointer; margin-bottom: 10px;
+  transition: opacity 0.15s;
+}
+.login-btn:active { opacity: 0.8; }
+.login-btn-primary { background: var(--gold); color: var(--bg); }
+.login-btn-secondary {
+  background: rgba(212,175,95,0.1);
+  border: 1px solid var(--border); color: var(--gold2);
+}
+.login-divider {
+  text-align: center; font-size: 0.7rem;
+  color: var(--muted); margin: 6px 0 12px;
+  letter-spacing: 0.08em;
+}
+.remember-row {
+  display: flex; align-items: center; gap: 9px;
+  margin-bottom: 18px; cursor: pointer;
+}
+.remember-row input { accent-color: var(--gold); width: 16px; height: 16px; }
+.remember-row span { font-size: 0.82rem; color: var(--muted); }
+.mode-hint {
+  text-align: center; font-size: 0.78rem; color: var(--muted);
+  margin-top: 12px;
+}
+.mode-hint a { color: var(--gold); cursor: pointer; }
+#display-field { display: none; }
 
-    .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 2rem;
-      max-width: 500px;
-      width: 90%;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-      animation: slideUp 0.3s ease;
-    }
+/* ── Trip Cards ──────────────────────────────────────────────────────────── */
+.trip-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px; margin-bottom: 10px;
+  overflow: hidden;
+}
+.trip-card.visible { border-color: rgba(212,175,95,0.4); }
 
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
+.card-head {
+  display: flex; align-items: center; gap: 11px;
+  padding: 13px 14px; cursor: pointer;
+}
+.card-check {
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 2px solid rgba(212,175,95,0.4);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all 0.15s;
+}
+.card-check.on { background: var(--gold); border-color: var(--gold); }
+.card-check.on::after { content: '✓'; font-size: 13px; color: var(--bg); font-weight: 800; }
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.98rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-left: 9px;
+}
+.card-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+.card-arrow { color: var(--muted); font-size: 0.85rem; transition: transform 0.2s; }
+.trip-card.expanded .card-arrow { transform: rotate(90deg); }
 
-    .modal h2 {
-      font-family: 'Lora', serif;
-      color: var(--accent);
-      margin-bottom: 1.5rem;
-      font-size: 1.75rem;
-    }
+.card-body {
+  display: none; padding: 0 14px 14px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.trip-card.expanded .card-body { display: block; }
 
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
+.stop-line {
+  display: flex; align-items: center;
+  gap: 9px; padding: 7px 0;
+  font-size: 0.83rem; color: var(--text);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.stop-line:last-of-type { border-bottom: none; }
+.stop-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  flex-shrink: 0; background: var(--gold);
+}
+.stop-dot.dep { background: var(--red); }
+.stop-date { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
 
-    .form-group label {
-      display: block;
-      margin-bottom: 0.5rem;
-      color: var(--text-dim);
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
+/* Photo link between stops */
+.photo-link {
+  display: flex; align-items: center; gap: 8px;
+  margin: 3px 0 3px 18px; padding: 7px 11px;
+  background: rgba(74,158,187,0.08);
+  border: 1px solid rgba(74,158,187,0.22);
+  border-radius: 8px; text-decoration: none;
+  cursor: pointer;
+}
+.photo-link:active { background: rgba(74,158,187,0.18); }
+.photo-link-text { font-size: 0.73rem; color: #7dd4f0; line-height: 1.4; }
+.photo-link-text strong { display: block; font-size: 0.76rem; }
+.photo-link-arrow { margin-left: auto; color: rgba(125,212,240,0.45); font-size: 0.78rem; }
 
-    .form-group input {
-      width: 100%;
-      padding: 0.75rem;
-      background: var(--bg-dark);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 1rem;
-      transition: all 0.3s ease;
-    }
+.card-actions {
+  display: flex; gap: 8px; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);
+}
+.card-btn {
+  flex: 1; padding: 8px; border-radius: 8px;
+  background: rgba(212,175,95,0.07);
+  border: 1px solid var(--border);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.75rem; color: var(--gold2);
+  cursor: pointer; text-align: center;
+}
+.card-btn.del { color: var(--red); border-color: rgba(224,90,58,0.22); background: rgba(224,90,58,0.05); }
 
-    .form-group input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(232, 181, 95, 0.1);
-    }
+.no-trips {
+  text-align: center; padding: 36px 20px;
+  color: var(--muted); font-size: 0.88rem; line-height: 1.8;
+}
 
-    .modal-actions {
-      display: flex;
-      gap: 1rem;
-      margin-top: 2rem;
-    }
-
-    .modal-actions button {
-      flex: 1;
-    }
-
-    .trips-list {
-      max-width: 1000px;
-      margin: 2rem auto;
-      padding: 0 2rem;
-    }
-
-    .trip-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1rem;
-      transition: all 0.3s ease;
-      cursor: pointer;
-    }
-
-    .trip-card:hover {
-      border-color: var(--accent);
-      transform: translateX(4px);
-      box-shadow: 0 4px 16px var(--shadow);
-    }
-
-    .trip-card h3 {
-      font-family: 'Lora', serif;
-      color: var(--accent);
-      margin-bottom: 0.5rem;
-      font-size: 1.25rem;
-    }
-
-    .trip-card .route {
-      color: var(--text);
-      font-size: 1.05rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .trip-card .dates {
-      color: var(--text-dim);
-      font-size: 0.9rem;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 3rem 2rem;
-      color: var(--text-dim);
-    }
-
-    .empty-state p {
-      font-size: 1.1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    canvas {
-      display: block;
-    }
-
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: var(--bg-darker);
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--surface);
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--surface-light);
-    }
-  </style>
+/* Select-all row */
+.select-all-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--muted); cursor: pointer;
+}
+.select-all-row input { accent-color: var(--gold); width: 15px; height: 15px; }
+</style>
 </head>
 <body>
-  <div class="header">
-    <h1>Wandermap</h1>
-    <p>Track your journeys across the globe</p>
-  </div>
 
-  <div class="controls">
-    <button class="primary" onclick="openAddTrip()">+ Add Trip</button>
-    <button onclick="viewTrips()">View All Trips</button>
-    <button onclick="resetView()">Reset View</button>
-  </div>
+<!-- Globe -->
+<div id="globe-wrap"><canvas id="c"></canvas></div>
 
-  <div id="globe-container"></div>
-
-  <div id="trips-section" class="trips-list" style="display: none;">
-    <h2 style="font-family: 'Lora', serif; color: var(--accent); margin-bottom: 1.5rem; font-size: 2rem;">Your Trips</h2>
-    <div id="trips-container"></div>
-  </div>
-
-  <!-- Add Trip Modal -->
-  <div id="add-modal" class="modal-overlay">
-    <div class="modal">
-      <h2>Add New Trip</h2>
-      <form id="trip-form">
-        <div class="form-group">
-          <label for="trip-name">Trip Name</label>
-          <input type="text" id="trip-name" required placeholder="e.g., Summer Europe Tour">
-        </div>
-        <div class="form-group">
-          <label for="departure">Departure City</label>
-          <input type="text" id="departure" required placeholder="e.g., New York">
-        </div>
-        <div class="form-group">
-          <label for="destination">Destination City</label>
-          <input type="text" id="destination" required placeholder="e.g., Paris">
-        </div>
-        <div class="form-group">
-          <label for="start-date">Start Date</label>
-          <input type="date" id="start-date" required>
-        </div>
-        <div class="form-group">
-          <label for="end-date">End Date</label>
-          <input type="date" id="end-date">
-        </div>
-        <div class="modal-actions">
-          <button type="button" onclick="closeAddTrip()">Cancel</button>
-          <button type="submit" class="primary">Save Trip</button>
-        </div>
-      </form>
+<!-- Header -->
+<header>
+  <div class="logo">Wandermap</div>
+  <div class="header-right">
+    <span id="journey-count"></span>
+    <div id="user-pill" onclick="toggleUserMenu()">
+      <div class="user-avatar" id="uavatar">?</div>
+      <span class="user-name" id="uname">—</span>
     </div>
   </div>
+</header>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
-    // City coordinates database
-    const cityCoords = {
-      'new york': { lat: 40.7128, lng: -74.0060 },
-      'london': { lat: 51.5074, lng: -0.1278 },
-      'paris': { lat: 48.8566, lng: 2.3522 },
-      'tokyo': { lat: 35.6762, lng: 139.6503 },
-      'sydney': { lat: -33.8688, lng: 151.2093 },
-      'dubai': { lat: 25.2048, lng: 55.2708 },
-      'singapore': { lat: 1.3521, lng: 103.8198 },
-      'hong kong': { lat: 22.3193, lng: 114.1694 },
-      'los angeles': { lat: 34.0522, lng: -118.2437 },
-      'san francisco': { lat: 37.7749, lng: -122.4194 },
-      'miami': { lat: 25.7617, lng: -80.1918 },
-      'barcelona': { lat: 41.3851, lng: 2.1734 },
-      'rome': { lat: 41.9028, lng: 12.4964 },
-      'amsterdam': { lat: 52.3676, lng: 4.9041 },
-      'berlin': { lat: 52.5200, lng: 13.4050 },
-      'madrid': { lat: 40.4168, lng: -3.7038 },
-      'athens': { lat: 37.9838, lng: 23.7275 },
-      'istanbul': { lat: 41.0082, lng: 28.9784 },
-      'bangkok': { lat: 13.7563, lng: 100.5018 },
-      'beijing': { lat: 39.9042, lng: 116.4074 },
-      'shanghai': { lat: 31.2304, lng: 121.4737 },
-      'mumbai': { lat: 19.0760, lng: 72.8777 },
-      'delhi': { lat: 28.7041, lng: 77.1025 },
-      'seoul': { lat: 37.5665, lng: 126.9780 },
-      'mexico city': { lat: 19.4326, lng: -99.1332 },
-      'rio de janeiro': { lat: -22.9068, lng: -43.1729 },
-      'buenos aires': { lat: -34.6037, lng: -58.3816 },
-      'cairo': { lat: 30.0444, lng: 31.2357 },
-      'johannesburg': { lat: -26.2041, lng: 28.0473 },
-      'moscow': { lat: 55.7558, lng: 37.6173 },
-      'toronto': { lat: 43.6532, lng: -79.3832 },
-      'vancouver': { lat: 49.2827, lng: -123.1207 },
-      'montreal': { lat: 45.5017, lng: -73.5673 },
-      'chicago': { lat: 41.8781, lng: -87.6298 },
-      'seattle': { lat: 47.6062, lng: -122.3321 },
-      'boston': { lat: 42.3601, lng: -71.0589 },
-      'washington': { lat: 38.9072, lng: -77.0369 },
-      'las vegas': { lat: 36.1699, lng: -115.1398 },
-      'orlando': { lat: 28.5383, lng: -81.3792 },
-      'lisbon': { lat: 38.7223, lng: -9.1393 },
-      'vienna': { lat: 48.2082, lng: 16.3738 },
-      'prague': { lat: 50.0755, lng: 14.4378 },
-      'budapest': { lat: 47.4979, lng: 19.0402 },
-      'warsaw': { lat: 52.2297, lng: 21.0122 },
-      'stockholm': { lat: 59.3293, lng: 18.0686 },
-      'copenhagen': { lat: 55.6761, lng: 12.5683 },
-      'oslo': { lat: 59.9139, lng: 10.7522 },
-      'helsinki': { lat: 60.1699, lng: 24.9384 },
-      'reykjavik': { lat: 64.1466, lng: -21.9426 },
-      'dublin': { lat: 53.3498, lng: -6.2603 },
-      'edinburgh': { lat: 55.9533, lng: -3.1883 },
-      'milan': { lat: 45.4642, lng: 9.1900 },
-      'venice': { lat: 45.4408, lng: 12.3155 },
-      'florence': { lat: 43.7696, lng: 11.2558 },
-      'naples': { lat: 40.8518, lng: 14.2681 },
-      'zurich': { lat: 47.3769, lng: 8.5417 },
-      'geneva': { lat: 46.2044, lng: 6.1432 },
-      'brussels': { lat: 50.8503, lng: 4.3517 },
-      'frankfurt': { lat: 50.1109, lng: 8.6821 },
-      'munich': { lat: 48.1351, lng: 11.5820 },
-      'hamburg': { lat: 53.5511, lng: 9.9937 },
-      'cologne': { lat: 50.9375, lng: 6.9603 }
-    };
+<!-- Bottom Bar -->
+<div id="bottom-bar">
+  <div class="btn-row">
+    <button class="btn btn-trips" id="btn-trips">☰ My Trips</button>
+    <button class="btn btn-add"   id="btn-add">+ New Journey</button>
+  </div>
+  <button class="btn-signout" onclick="doLogout()">⟵ Sign Out</button>
+</div>
 
-    // Storage functions
-    function saveTrips(trips) {
-      localStorage.setItem('wandermap_trips', JSON.stringify(trips));
+<!-- Login Screen -->
+<div id="login-screen">
+  <div id="login-box">
+    <div class="login-logo">Wandermap</div>
+    <div class="login-sub">Your personal travel globe</div>
+    <div id="display-field" class="field">
+      <label>Your Name</label>
+      <input type="text" id="l-display" placeholder="e.g. Allen" autocomplete="name">
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="l-user" placeholder="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <label class="remember-row">
+      <input type="checkbox" id="l-remember" checked>
+      <span>Remember me on this device</span>
+    </label>
+    <div class="login-err" id="l-err"></div>
+    <button class="login-btn login-btn-primary" id="l-submit">Sign In</button>
+    <div class="login-divider" id="l-divider">— or —</div>
+    <button class="login-btn login-btn-secondary" id="l-switch-btn">Create Account</button>
+    <div class="mode-hint">New here? <a id="l-mode-link">Create a free account</a></div>
+  </div>
+</div>
+
+<!-- My Trips Panel -->
+<div class="overlay" id="ov-trips">
+  <div class="sheet">
+    <div class="sheet-header">
+      <span class="sheet-title">My Journeys</span>
+      <div style="display:flex;align-items:center;gap:14px">
+        <label class="select-all-row">
+          <input type="checkbox" id="cb-all"> All
+        </label>
+        <button class="close-btn" onclick="close_('ov-trips')">✕</button>
+      </div>
+    </div>
+    <div class="sheet-body" id="trips-list"></div>
+  </div>
+</div>
+
+<!-- New Journey Panel -->
+<div class="overlay" id="ov-journey">
+  <div class="sheet">
+    <div class="sheet-header">
+      <span class="sheet-title" id="journey-title">New Journey</span>
+      <button class="close-btn" onclick="close_('ov-journey')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;line-height:1.65;">
+        Paste your cruise or travel itinerary below. Ports, dates and trip name are extracted automatically.
+      </p>
+      <div class="field">
+        <label>Trip Name</label>
+        <input type="text" id="j-name" placeholder="Auto-filled from itinerary" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Paste Itinerary</label>
+        <textarea id="j-text" rows="11"
+          placeholder="Paste any format, e.g.:&#10;&#10;Day 1  Sun, Nov 27, 2022  Cape Liberty – Depart&#10;Day 2  Mon, Nov 28, 2022  At Sea&#10;Day 3  Tue, Nov 29, 2022  Nassau&#10;Day 8  Sun, Dec 4, 2022   Cape Liberty – Return&#10;&#10;At Sea days are skipped automatically."></textarea>
+      </div>
+      <div class="status-msg" id="j-status"></div>
+      <button class="save-btn" id="j-save">✨ Create Journey</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function qs(sel, ctx=document) { return ctx.querySelector(sel); }
+function open_(id) { $(id).classList.add('open'); }
+function close_(id) { $(id).classList.remove('open'); }
+
+// ── City database ────────────────────────────────────────────────────────────
+const CITIES = {
+  "new york":[40.71,-74.01],"los angeles":[34.05,-118.24],"chicago":[41.88,-87.63],
+  "houston":[29.76,-95.37],"miami":[25.77,-80.19],"seattle":[47.61,-122.33],
+  "san francisco":[37.77,-122.42],"las vegas":[36.17,-115.14],"boston":[42.36,-71.06],
+  "denver":[39.74,-104.99],"atlanta":[33.75,-84.39],"dallas":[32.78,-96.80],
+  "phoenix":[33.45,-112.07],"washington":[38.91,-77.04],"orlando":[28.54,-81.38],
+  "new orleans":[29.95,-90.07],"portland":[45.52,-122.68],"nashville":[36.17,-86.78],
+  "detroit":[42.33,-83.05],"philadelphia":[39.95,-75.17],"tampa":[27.95,-82.46],
+  "san diego":[32.72,-117.15],"london":[51.51,-0.13],"paris":[48.86,2.35],
+  "rome":[41.90,12.50],"amsterdam":[52.37,4.90],"berlin":[52.52,13.40],
+  "madrid":[40.42,-3.70],"barcelona":[41.39,2.16],"lisbon":[38.72,-9.14],
+  "vienna":[48.21,16.37],"prague":[50.08,14.44],"budapest":[47.50,19.04],
+  "athens":[37.98,23.73],"istanbul":[41.01,28.98],"dublin":[53.33,-6.25],
+  "edinburgh":[55.95,-3.19],"stockholm":[59.33,18.07],"oslo":[59.91,10.75],
+  "copenhagen":[55.68,12.57],"helsinki":[60.17,24.94],"zurich":[47.38,8.54],
+  "milan":[45.46,9.19],"venice":[45.44,12.33],"florence":[43.77,11.25],
+  "brussels":[50.85,4.35],"porto":[41.15,-8.61],"nice":[43.70,7.27],
+  "tokyo":[35.68,139.69],"osaka":[34.69,135.50],"kyoto":[35.01,135.77],
+  "seoul":[37.57,126.98],"beijing":[39.91,116.39],"shanghai":[31.23,121.47],
+  "hong kong":[22.32,114.17],"singapore":[1.35,103.82],"bangkok":[13.75,100.52],
+  "bali":[-8.34,115.09],"taipei":[25.04,121.56],"kuala lumpur":[3.14,101.69],
+  "sydney":[-33.87,151.21],"melbourne":[-37.81,144.96],"auckland":[-36.85,174.76],
+  "dubai":[25.20,55.27],"abu dhabi":[24.45,54.37],"doha":[25.29,51.53],
+  "cairo":[30.04,31.24],"nairobi":[-1.29,36.82],"cape town":[-33.93,18.42],
+  "johannesburg":[-26.20,28.04],"casablanca":[33.59,-7.62],"lagos":[6.45,3.40],
+  "marrakech":[31.63,-8.01],"mexico city":[19.43,-99.13],"cancun":[21.16,-86.85],
+  "havana":[23.13,-82.38],"bogota":[4.71,-74.07],"lima":[-12.05,-77.04],
+  "santiago":[-33.46,-70.65],"buenos aires":[-34.60,-58.38],
+  "rio de janeiro":[-22.91,-43.17],"sao paulo":[-23.55,-46.63],
+  "toronto":[43.65,-79.38],"montreal":[45.51,-73.55],"vancouver":[49.25,-123.12],
+  "reykjavik":[64.13,-21.82],"honolulu":[21.31,-157.86],"anchorage":[61.22,-149.90],
+  "mumbai":[19.08,72.88],"delhi":[28.61,77.21],"bangalore":[12.97,77.59],
+  "moscow":[55.75,37.62],"kyiv":[50.45,30.52],"warsaw":[52.23,21.01],
+  "nassau":[25.04,-77.35],"san juan":[18.47,-66.12],"st. thomas":[18.34,-64.93],
+  "st. maarten":[18.04,-63.07],"bridgetown":[13.10,-59.61],"kingston":[17.99,-76.79],
+  "hamilton":[32.29,-64.78],"bermuda":[32.30,-64.78],
+};
+
+// Cruise port alias map
+const PORT_ALIASES = {
+  "cape liberty":[40.64,-74.07],"cape liberty cruise port":[40.64,-74.07],
+  "bayonne":[40.64,-74.07],"bayonne nj":[40.64,-74.07],
+  "cococay":[25.83,-77.55],"cocoa cay":[25.83,-77.55],
+  "perfect day at cococay":[25.83,-77.55],"perfect day cococay":[25.83,-77.55],
+  "port canaveral":[28.42,-80.59],"cape canaveral":[28.42,-80.59],
+  "port everglades":[26.08,-80.13],"fort lauderdale":[26.12,-80.14],
+  "port miami":[25.77,-80.19],"portmiami":[25.77,-80.19],
+  "miami cruise port":[25.77,-80.19],
+  "galveston":[29.30,-94.80],"baltimore":[39.29,-76.61],
+  "norfolk":[36.85,-76.29],"charleston":[32.78,-79.94],
+  "southampton":[50.90,-1.40],"dover":[51.13,1.31],
+  "civitavecchia":[42.09,11.80],"piraeus":[37.94,23.65],
+  "valletta":[35.90,14.51],"malta":[35.90,14.51],
+  "dubrovnik":[42.65,18.09],"kotor":[42.42,18.77],
+  "mykonos":[37.45,25.33],"santorini":[36.40,25.46],
+  "rhodes":[36.44,28.22],"corfu":[39.62,19.92],
+  "kusadasi":[37.86,27.26],"ephesus":[37.94,27.34],
+  "juneau":[58.30,-134.42],"skagway":[59.46,-135.32],
+  "ketchikan":[55.34,-131.65],"sitka":[57.05,-135.33],
+  "labadee":[19.77,-72.24],"great stirrup cay":[25.83,-77.90],
+  "half moon cay":[24.94,-76.18],"castaway cay":[25.45,-77.55],
+  "ocean cay":[25.39,-79.17],"harvest caye":[16.10,-88.58],
+  "amber cove":[19.83,-70.71],"george town":[19.29,-81.38],
+  "grand cayman":[19.29,-81.38],"cozumel":[20.51,-86.95],
+  "costa maya":[18.73,-87.71],"progreso":[21.28,-89.66],
+  "roatan":[16.32,-86.53],"belize city":[17.25,-88.77],
+  "cartagena":[10.39,-75.48],"falmouth":[18.49,-77.66],
+  "ocho rios":[18.41,-77.10],"montego bay":[18.47,-77.92],
+  "willemstad":[12.11,-68.93],"oranjestad":[12.52,-70.03],
+  "philipsburg":[18.02,-63.05],"basseterre":[17.30,-62.72],
+  "castries":[14.01,-60.99],"charlotte amalie":[18.34,-64.93],
+  "canada place":[49.29,-123.11],"san pedro":[33.74,-118.27],
+  "long beach":[33.77,-118.20],
+};
+
+function resolveCoords(name) {
+  if (!name) return null;
+  const k = name.trim().toLowerCase().replace(/\s+/g,' ');
+  if (PORT_ALIASES[k]) return PORT_ALIASES[k];
+  for (const [a,c] of Object.entries(PORT_ALIASES)) {
+    if (k.includes(a) || a.includes(k)) return c;
+  }
+  if (CITIES[k]) return CITIES[k];
+  for (const [n,c] of Object.entries(CITIES)) {
+    if (n.startsWith(k) || k.startsWith(n)) return c;
+  }
+  for (const [n,c] of Object.entries(CITIES)) {
+    if (n.includes(k) || k.includes(n)) return c;
+  }
+  const words = k.split(/\s+/).filter(w=>w.length>3);
+  for (const [n,c] of Object.entries(CITIES)) {
+    for (const w of words) { if (n.startsWith(w)) return c; }
+  }
+  return null;
+}
+
+function suggestCities(q, max=7) {
+  if (!q || q.length < 1) return [];
+  const k = q.trim().toLowerCase();
+  const a=[], b=[], c=[];
+  for (const n of Object.keys(CITIES)) {
+    if (n===k) a.push(n);
+    else if (n.startsWith(k)) b.push(n);
+    else if (n.includes(k)) c.push(n);
+  }
+  return [...a,...b,...c].slice(0,max);
+}
+
+function titleCase(s) {
+  if (!s) return '';
+  return s.trim().split(' ').map(w=>w?w[0].toUpperCase()+w.slice(1):'').join(' ');
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+' '+Number(day);
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+let currentUser = null;
+
+function hashPw(p) {
+  let h=0;
+  for (let i=0;i<p.length;i++){h=((h<<5)-h)+p.charCodeAt(i);h|=0;}
+  return h.toString(36);
+}
+function getUsers() { try{return JSON.parse(localStorage.getItem('wm_users')||'{}');}catch{return{};} }
+function saveUsers(u) { localStorage.setItem('wm_users',JSON.stringify(u)); }
+
+function tripsKey(username) { return 'wm_t_'+username; }
+
+function loadTrips(username) {
+  try {
+    // Check under username key AND guest key, take the larger set
+    const keys = username ? [tripsKey(username),'wm_t_guest'] : ['wm_t_guest'];
+    let best = [];
+    for (const k of keys) {
+      const t = JSON.parse(localStorage.getItem(k)||'[]');
+      if (t.length > best.length) best = t;
     }
+    best.forEach(t=>{ if(t.visible===undefined) t.visible=true; });
+    return best;
+  } catch { return []; }
+}
 
-    function loadTrips() {
-      const data = localStorage.getItem('wandermap_trips');
-      return data ? JSON.parse(data) : [];
-    }
+function saveTrips() {
+  const data = JSON.stringify(trips);
+  // Save under guest key always so no-login use persists
+  localStorage.setItem('wm_t_guest', data);
+  if (currentUser) localStorage.setItem(tripsKey(currentUser.username), data);
+}
 
-    function getCityCoords(cityName) {
-      const normalized = cityName.toLowerCase().trim();
-      return cityCoords[normalized] || null;
-    }
+// ── Trips state ──────────────────────────────────────────────────────────────
+let trips = loadTrips(null);
 
-    // Three.js Globe Setup
-    let scene, camera, renderer, globe, trips = [];
-    let routeLines = [];
+// ── Login logic ───────────────────────────────────────────────────────────────
+let loginMode = 'signin';
 
-    function initGlobe() {
-      const container = document.getElementById('globe-container');
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+function setMode(mode) {
+  loginMode = mode;
+  const isReg = mode === 'register';
+  $('display-field').style.display = isReg ? '' : 'none';
+  $('l-submit').textContent = isReg ? 'Create Account' : 'Sign In';
+  $('l-switch-btn').style.display = isReg ? 'none' : '';
+  $('l-divider').style.display = isReg ? 'none' : '';
+  $('l-mode-link').textContent = isReg ? 'Back to sign in' : 'Create a free account';
+  $('l-err').textContent = '';
+}
 
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      camera.position.z = 2.5;
+function doLogin() {
+  const username = $('l-user').value.trim().toLowerCase();
+  const password = $('l-pass').value;
+  const remember = $('l-remember').checked;
+  const err = $('l-err');
+  if (!username) { err.textContent='Please enter a username.'; return; }
+  if (!password)  { err.textContent='Please enter a password.'; return; }
+  const users = getUsers();
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setSize(width, height);
-      renderer.setClearColor(0x000000, 0);
-      container.appendChild(renderer.domElement);
+  if (loginMode === 'register') {
+    const display = $('l-display').value.trim() || titleCase(username);
+    if (username.length < 3) { err.textContent='Username needs 3+ characters.'; return; }
+    if (password.length < 4) { err.textContent='Password needs 4+ characters.'; return; }
+    if (users[username]) { err.textContent='Username taken — try another.'; return; }
+    users[username] = { hash: hashPw(password), display };
+    saveUsers(users);
+    startSession(username, display, remember, password);
+  } else {
+    const u = users[username];
+    if (!u) { err.textContent='Account not found.'; return; }
+    if (u.hash !== hashPw(password)) { err.textContent='Incorrect password.'; return; }
+    startSession(username, u.display||titleCase(username), remember, password);
+  }
+}
 
-      // Create Earth
-      const geometry = new THREE.SphereGeometry(1, 64, 64);
-      const texture = createEarthTexture();
-      const material = new THREE.MeshBasicMaterial({ map: texture });
-      globe = new THREE.Mesh(geometry, material);
-      scene.add(globe);
+function startSession(username, display, remember, password) {
+  currentUser = { username, display };
+  localStorage.setItem('wm_session', JSON.stringify({ username, display }));
+  if (remember && password) localStorage.setItem('wm_remember', JSON.stringify({ username, password }));
+  else if (!remember) localStorage.removeItem('wm_remember');
 
-      // Lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
-      const pointLight = new THREE.PointLight(0xe8b55f, 0.8);
-      pointLight.position.set(5, 3, 5);
-      scene.add(pointLight);
+  // Load this user's trips — keep the largest set between user key and guest key
+  trips = loadTrips(username);
+  saveTrips(); // write under username key now
 
-      // Load and render saved trips
-      trips = loadTrips();
-      trips.forEach(trip => addRouteToGlobe(trip));
+  $('uavatar').textContent = (display||username)[0].toUpperCase();
+  $('uname').textContent = display || username;
+  $('login-screen').style.display = 'none';
+  updateStats();
+  renderTrips();
+}
 
-      animate();
-    }
+function doLogout() {
+  saveTrips(); // ensure saved before clearing
+  currentUser = null;
+  localStorage.removeItem('wm_session');
+  localStorage.removeItem('wm_remember');
+  trips = [];
+  $('login-screen').style.display = 'flex';
+  updateStats();
+}
 
-    function createEarthTexture() {
-      const canvas = document.createElement('canvas');
-      canvas.width = 2048;
-      canvas.height = 1024;
-      const ctx = canvas.getContext('2d');
+function toggleUserMenu() { /* future: show menu */ doLogout(); }
 
-      // Ocean
-      ctx.fillStyle = '#1a1f35';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Simplified continents
-      ctx.fillStyle = '#2d3550';
-      
-      // North America
-      ctx.beginPath();
-      ctx.arc(400, 350, 200, 0, Math.PI * 2);
-      ctx.fill();
-
-      // South America
-      ctx.beginPath();
-      ctx.arc(500, 700, 150, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Europe
-      ctx.beginPath();
-      ctx.arc(1050, 300, 120, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Africa
-      ctx.beginPath();
-      ctx.arc(1100, 550, 180, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Asia
-      ctx.beginPath();
-      ctx.arc(1500, 350, 250, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Australia
-      ctx.beginPath();
-      ctx.arc(1700, 750, 100, 0, Math.PI * 2);
-      ctx.fill();
-
-      const texture = new THREE.CanvasTexture(canvas);
-      return texture;
-    }
-
-    function latLngToVector3(lat, lng, radius = 1) {
-      const phi = (90 - lat) * (Math.PI / 180);
-      const theta = (lng + 180) * (Math.PI / 180);
-
-      const x = -(radius * Math.sin(phi) * Math.cos(theta));
-      const y = radius * Math.cos(phi);
-      const z = radius * Math.sin(phi) * Math.sin(theta);
-
-      return new THREE.Vector3(x, y, z);
-    }
-
-    function addRouteToGlobe(trip) {
-      const start = getCityCoords(trip.departure);
-      const end = getCityCoords(trip.destination);
-
-      if (!start || !end) return;
-
-      const startVec = latLngToVector3(start.lat, start.lng, 1.02);
-      const endVec = latLngToVector3(end.lat, end.lng, 1.02);
-
-      // Create arc
-      const curve = new THREE.QuadraticBezierCurve3(
-        startVec,
-        startVec.clone().add(endVec).multiplyScalar(0.7),
-        endVec
-      );
-
-      const points = curve.getPoints(50);
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({ 
-        color: 0xe8b55f, 
-        linewidth: 2,
-        transparent: true,
-        opacity: 0.8
-      });
-      const line = new THREE.Line(geometry, material);
-      
-      scene.add(line);
-      routeLines.push(line);
-
-      // Add markers
-      const startMarker = createMarker();
-      startMarker.position.copy(startVec);
-      scene.add(startMarker);
-
-      const endMarker = createMarker();
-      endMarker.position.copy(endVec);
-      scene.add(endMarker);
-    }
-
-    function createMarker() {
-      const geometry = new THREE.SphereGeometry(0.02, 16, 16);
-      const material = new THREE.MeshBasicMaterial({ color: 0xf5d89a });
-      return new THREE.Mesh(geometry, material);
-    }
-
-    function clearRoutes() {
-      routeLines.forEach(line => {
-        scene.remove(line);
-        line.geometry.dispose();
-        line.material.dispose();
-      });
-      routeLines = [];
-      
-      // Remove markers
-      scene.children.forEach(child => {
-        if (child instanceof THREE.Mesh && child !== globe) {
-          scene.remove(child);
-          child.geometry.dispose();
-          child.material.dispose();
-        }
-      });
-    }
-
-    let isDragging = false;
-    let previousMousePosition = { x: 0, y: 0 };
-
-    renderer.domElement.addEventListener('mousedown', () => {
-      isDragging = true;
+// Restore session on load
+(function restore() {
+  const sess = (() => { try{return JSON.parse(localStorage.getItem('wm_session'));}catch{return null;} })();
+  const rem  = (() => { try{return JSON.parse(localStorage.getItem('wm_remember'));}catch{return null;} })();
+  if (sess?.username && getUsers()[sess.username]) {
+    // delay until DOM ready
+    window.addEventListener('DOMContentLoaded', () => startSession(sess.username, sess.display||sess.username, false, null));
+    return;
+  }
+  if (rem?.username) {
+    window.addEventListener('DOMContentLoaded', () => {
+      $('l-user').value = rem.username;
+      $('l-pass').value = rem.password||'';
+      $('l-remember').checked = true;
     });
+  }
+})();
 
-    renderer.domElement.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        const deltaX = e.clientX - previousMousePosition.x;
-        const deltaY = e.clientY - previousMousePosition.y;
+// ── Globe ─────────────────────────────────────────────────────────────────────
+const canvas = $('c');
+const ctx = canvas.getContext('2d');
+let W,H,R,cx,cy;
+let rotLon=-20, rotLat=-10, zoom=1;
+let dragging=false, ds, dr, pinchDist=null;
+let worldData=null, spinning=true;
+const COLORS=['#d4af5f','#e05a3a','#4a9ebb','#7ec87e','#c97bbb','#e0954a','#4a7ec8'];
 
-        globe.rotation.y += deltaX * 0.005;
-        globe.rotation.x += deltaY * 0.005;
-      }
-      previousMousePosition = { x: e.clientX, y: e.clientY };
+function resize() {
+  const dpr = devicePixelRatio||1;
+  W=canvas.offsetWidth; H=canvas.offsetHeight;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  ctx.scale(dpr,dpr);
+  R=Math.min(W,H)*0.41; cx=W/2; cy=H/2;
+}
+
+function proj() {
+  return d3.geoOrthographic()
+    .scale(R*zoom).translate([cx,cy])
+    .rotate([rotLon,rotLat]).clipAngle(90);
+}
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  const p=proj(), gp=d3.geoPath(p,ctx);
+
+  // Ocean
+  const og=ctx.createRadialGradient(cx-R*.2,cy-R*.25,R*.04,cx,cy,R);
+  og.addColorStop(0,'#1a3560'); og.addColorStop(.5,'#0d2040'); og.addColorStop(1,'#050e20');
+  ctx.beginPath(); gp({type:'Sphere'}); ctx.fillStyle=og; ctx.fill();
+
+  // Atmosphere
+  const ag=ctx.createRadialGradient(cx,cy,R*.93,cx,cy,R*1.1);
+  ag.addColorStop(0,'rgba(60,130,220,.14)'); ag.addColorStop(1,'rgba(60,130,220,0)');
+  ctx.beginPath(); ctx.arc(cx,cy,R*1.1,0,Math.PI*2); ctx.fillStyle=ag; ctx.fill();
+
+  // Grid
+  ctx.beginPath(); gp(d3.geoGraticule()());
+  ctx.strokeStyle='rgba(100,160,255,.055)'; ctx.lineWidth=.5; ctx.stroke();
+
+  // Land
+  if (worldData) {
+    ctx.beginPath(); gp(worldData.land); ctx.fillStyle='#1d3d2a'; ctx.fill();
+    ctx.beginPath(); gp(worldData.land); ctx.strokeStyle='#2d6040'; ctx.lineWidth=.7; ctx.stroke();
+    ctx.beginPath(); gp(worldData.borders); ctx.strokeStyle='rgba(45,96,64,.45)'; ctx.lineWidth=.4; ctx.stroke();
+  }
+
+  // Globe outline
+  ctx.beginPath(); gp({type:'Sphere'});
+  ctx.strokeStyle='rgba(212,175,95,.18)'; ctx.lineWidth=1.2; ctx.stroke();
+
+  // Trip arcs
+  trips.forEach((t,ti) => {
+    if (!t.visible || !t.stops?.length) return;
+    const col = COLORS[ti%COLORS.length];
+    const stops = t.stops;
+    for (let i=0;i<stops.length-1;i++) {
+      const a=stops[i], b=stops[i+1];
+      if (!a.coords||!b.coords) continue;
+      drawArc(p, gp, a.coords[1],a.coords[0], b.coords[1],b.coords[0], col);
+    }
+    stops.forEach((s,si)=>{
+      if (!s.coords) return;
+      const c = si===0?'#e05a3a':si===stops.length-1?col:'#ffffff';
+      drawDot(p, s.coords[1],s.coords[0], c, si===0||si===stops.length-1?5:3.5);
     });
+  });
+}
 
-    renderer.domElement.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
+function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
+  const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
+  const N = Math.max(80, Math.round(80*zoom));
+  const line = {type:'LineString', coordinates:Array.from({length:N+1},(_,i)=>interp(i/N))};
+  ctx.save();
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=.85;
+  ctx.setLineDash([6,5]);
+  ctx.beginPath(); gp(line); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
 
-    function animate() {
-      requestAnimationFrame(animate);
-      
-      if (!isDragging) {
-        globe.rotation.y += 0.001;
-      }
-      
-      renderer.render(scene, camera);
+function drawDot(p,lon,lat,color,r) {
+  const pt=p([lon,lat]); if(!pt) return;
+  ctx.beginPath(); ctx.arc(pt[0],pt[1],r,0,Math.PI*2);
+  ctx.fillStyle=color; ctx.fill();
+  ctx.beginPath(); ctx.arc(pt[0],pt[1],r+2.5,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.lineWidth=1; ctx.stroke();
+}
+
+let raf;
+function loop() {
+  if (spinning && !dragging) rotLon+=.18;
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+
+// Touch / mouse drag
+canvas.addEventListener('mousedown',e=>{spinning=false;dragging=true;ds=[e.clientX,e.clientY];dr=[rotLon,rotLat];});
+window.addEventListener('mousemove',e=>{if(!dragging)return;rotLon=dr[0]+(e.clientX-ds[0])*.4;rotLat=Math.max(-85,Math.min(85,dr[1]-(e.clientY-ds[1])*.4));});
+window.addEventListener('mouseup',()=>dragging=false);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(12,zoom*(e.deltaY<0?1.1:.92)));},{passive:false});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault(); spinning=false;
+  if(e.touches.length===1){dragging=true;ds=[e.touches[0].clientX,e.touches[0].clientY];dr=[rotLon,rotLat];pinchDist=null;}
+  else if(e.touches.length===2){dragging=false;pinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length===1&&dragging){rotLon=dr[0]+(e.touches[0].clientX-ds[0])*.4;rotLat=Math.max(-85,Math.min(85,dr[1]-(e.touches[0].clientY-ds[1])*.4));}
+  else if(e.touches.length===2&&pinchDist){const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(.3,Math.min(12,zoom*nd/pinchDist));pinchDist=nd;}
+},{passive:false});
+canvas.addEventListener('touchend',()=>{dragging=false;if(event.touches.length<2)pinchDist=null;});
+
+// ── Itinerary Parser ──────────────────────────────────────────────────────────
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+  january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12};
+
+const SEA_DAYS=['at sea','sea day','day at sea','cruising','sailing'];
+const SKIP_START=['stateroom','room ','deck ','reservation','your stateroom','note:'];
+
+function parseDate(s) {
+  if (!s) return null;
+  s=s.trim();
+  // YYYY-MM-DD
+  let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  // Month DD, YYYY  or  Mon, Month DD, YYYY
+  m=s.match(/(?:[A-Za-z]+,\s+)?([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if(m){const mo=MONTHS[m[1].toLowerCase()];if(mo)return`${m[3]}-${String(mo).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;}
+  // DD Month YYYY
+  m=s.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if(m){const mo=MONTHS[m[2].toLowerCase()];if(mo)return`${m[3]}-${String(mo).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;}
+  // Month DD (no year)
+  m=s.match(/([A-Za-z]+)\s+(\d{1,2})(?!\s*,?\s*\d{4})/);
+  if(m){const mo=MONTHS[m[1].toLowerCase()];if(mo)return`${new Date().getFullYear()}-${String(mo).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;}
+  return null;
+}
+
+function cleanPort(s) {
+  if(!s) return '';
+  s=s.replace(/[–—-]\s*(depart|return|arrive|departure|arrival|embark|disembark).*/i,'');
+  s=s.replace(/[–—-]?\s*\d{1,2}:\d{2}\s*(AM|PM)(\s+to\s+\d{1,2}:\d{2}\s*(AM|PM))?/ig,'');
+  s=s.replace(/^return\s+to\s+/i,'');
+  s=s.replace(/cruise\s+port$/i,'Cruise Port');
+  return s.trim().replace(/[,.\s]+$/,'').trim();
+}
+
+function isSea(s) { return SEA_DAYS.some(k=>s.toLowerCase().includes(k)); }
+
+function parseItinerary(text) {
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  let tripName='', stops=[];
+
+  // Find trip name
+  for(const line of lines){
+    if(/^day\s+date\s+port/i.test(line)) continue;
+    if(/^\d/.test(line)) continue;
+    if(line.length>8 && /cruise|tour|trip|voyage|night|sailing|expedition/i.test(line)){
+      tripName=line.replace(/:\s*$/,'').replace(/,?\s*departing\s+.*/i,'').trim();
+      if(tripName.length>50) tripName=tripName.replace(/\s+on\s+the\s+.*/i,'').trim();
+      break;
+    }
+  }
+
+  for(const line of lines){
+    if(isSea(line)) continue;
+    if(SKIP_START.some(s=>line.toLowerCase().startsWith(s))) continue;
+    if(/^day\s+date\s+port/i.test(line)) continue;
+    if(/^\d{4,}$/.test(line)) continue; // pure long numbers
+
+    // Tab-separated table: Day X \t Date \t Port
+    const parts=line.split(/\t/);
+    if(parts.length>=3){
+      const date=parseDate(parts[1]);
+      const city=cleanPort(parts[2]);
+      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
     }
 
-    window.addEventListener('resize', () => {
-      const container = document.getElementById('globe-container');
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    });
-
-    // Modal functions
-    function openAddTrip() {
-      document.getElementById('add-modal').classList.add('active');
+    // Date — Port  (various formats)
+    const m=line.match(/^(?:[A-Za-z]+,\s+)?([A-Za-z]+\s+\d{1,2},?\s*\d{4})\s*[\t–—:\-]+\s*(.+)$/);
+    if(m){
+      const date=parseDate(m[1]), city=cleanPort(m[2]);
+      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
     }
 
-    function closeAddTrip() {
-      document.getElementById('add-modal').classList.remove('active');
-      document.getElementById('trip-form').reset();
+    // Month DD — Port (no year)
+    const m2=line.match(/^([A-Za-z]+\s+\d{1,2})\s*[–—:-]+\s*(.+)$/);
+    if(m2){
+      const date=parseDate(m2[1]), city=cleanPort(m2[2]);
+      if(date&&city&&!isSea(city)){stops.push({city,date});continue;}
     }
 
-    function resetView() {
-      globe.rotation.set(0, 0, 0);
-      camera.position.set(0, 0, 2.5);
-    }
+    // Day X: Port
+    const m3=line.match(/^day\s+\d+\s*[:\-–—]\s*(.+)$/i);
+    if(m3){const city=cleanPort(m3[1]);if(city&&!isSea(city))stops.push({city,date:null});}
+  }
 
-    function viewTrips() {
-      const tripsSection = document.getElementById('trips-section');
-      const isVisible = tripsSection.style.display !== 'none';
-      tripsSection.style.display = isVisible ? 'none' : 'block';
-      
-      if (!isVisible) {
-        renderTripsList();
-        tripsSection.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
+  return {tripName, stops};
+}
 
-    function renderTripsList() {
-      const container = document.getElementById('trips-container');
-      
-      if (trips.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <p>No trips recorded yet.</p>
-            <button class="primary" onclick="openAddTrip()">Add Your First Trip</button>
-          </div>
-        `;
-        return;
-      }
+// ── Trip Management ───────────────────────────────────────────────────────────
+let editIdx=-1;
 
-      container.innerHTML = trips.map((trip, index) => `
-        <div class="trip-card" onclick="focusOnTrip(${index})">
-          <h3>${trip.name}</h3>
-          <div class="route">${trip.departure} → ${trip.destination}</div>
-          <div class="dates">
-            ${trip.startDate}${trip.endDate ? ' – ' + trip.endDate : ''}
-          </div>
+function updateStats(){
+  const v=trips.filter(t=>t.visible).length;
+  $('journey-count').textContent=trips.length?`${v}/${trips.length} ${trips.length===1?'journey':'journeys'}`:'';
+}
+
+function renderTrips(){
+  const list=$('trips-list');
+  const allOn=trips.length>0&&trips.every(t=>t.visible);
+  $('cb-all').checked=allOn;
+
+  if(!trips.length){list.innerHTML='<div class="no-trips">No journeys yet.<br>Tap + New Journey to start.</div>';return;}
+
+  // Sort newest first by first stop date
+  const sorted=[...trips].map((t,i)=>({t,i})).sort((a,b)=>{
+    const da=a.t.stops?.[0]?.date||'';
+    const db=b.t.stops?.[0]?.date||'';
+    if(!da&&!db) return b.i-a.i;
+    if(!da) return 1; if(!db) return -1;
+    return db.localeCompare(da);
+  });
+
+  list.innerHTML=sorted.map(({t,i})=>{
+    const col=COLORS[i%COLORS.length];
+    const s=t.stops||[];
+    const sub=`${s.length} stop${s.length!==1?'s':''}`;
+    return `<div class="trip-card${t.visible?' visible':''}" id="tc${i}">
+      <div class="card-head" onclick="toggleCard(${i})">
+        <div class="card-check${t.visible?' on':''}" onclick="event.stopPropagation();toggleVis(${i})"></div>
+        <div class="card-info">
+          <div class="card-name" style="border-left:3px solid ${col}">${t.name||'Unnamed trip'}</div>
+          <div class="card-sub">${sub}</div>
         </div>
-      `).join('');
+        <span class="card-arrow">›</span>
+      </div>
+      <div class="card-body" id="cb${i}">
+        ${s.map((st,si)=>{
+          const isFirst=si===0, isLast=si===s.length-1;
+          const stopHtml=`<div class="stop-line">
+            <div class="stop-dot${isFirst?' dep':''}"></div>
+            <span>${st.city}</span>
+            <span class="stop-date">${fmtDate(st.date)}</span>
+          </div>`;
+          const nextStop=s[si+1];
+          let photoHtml='';
+          if(nextStop&&st.date&&nextStop.date){
+            const url=`https://photos.google.com/search/${st.date}`;
+            photoHtml=`<a class="photo-link" href="${url}" target="_blank" rel="noopener">
+              <span>📷</span>
+              <span class="photo-link-text"><strong>${st.city} → ${nextStop.city}</strong>${fmtDate(st.date)} – ${fmtDate(nextStop.date)}</span>
+              <span class="photo-link-arrow">↗</span>
+            </a>`;
+          }
+          return stopHtml+photoHtml;
+        }).join('')}
+        <div class="card-actions">
+          <button class="card-btn" onclick="focusTrip(${i})">Focus</button>
+          <button class="card-btn" onclick="editTrip(${i})">Edit</button>
+          <button class="card-btn del" onclick="delTrip(${i})">Delete</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCard(i){
+  const card=$(`tc${i}`);
+  if(card) card.classList.toggle('expanded');
+}
+
+function toggleVis(i){
+  trips[i].visible=!trips[i].visible;
+  saveTrips(); updateStats(); renderTrips();
+}
+
+window.toggleVis=toggleVis;
+window.toggleCard=toggleCard;
+
+window.focusTrip=function(i){
+  const s=trips[i]?.stops;
+  if(s?.[0]?.coords){rotLon=-s[0].coords[1];rotLat=-s[0].coords[0]*.7;spinning=false;}
+  close_('ov-trips');
+};
+
+window.editTrip=function(i){
+  editIdx=i;
+  const t=trips[i];
+  $('journey-title').textContent='Edit Journey';
+  $('j-name').value=t.name||'';
+  $('j-text').value='';
+  $('j-status').textContent='';
+  close_('ov-trips');
+  open_('ov-journey');
+};
+
+window.delTrip=function(i){
+  if(!confirm(`Delete "${trips[i].name||'this trip'}"?`)) return;
+  trips.splice(i,1); saveTrips(); updateStats(); renderTrips();
+};
+
+$('cb-all').addEventListener('change',function(){
+  trips.forEach(t=>t.visible=this.checked);
+  saveTrips(); updateStats(); renderTrips();
+});
+
+// ── New Journey ───────────────────────────────────────────────────────────────
+$('j-save').addEventListener('click', () => {
+  const text=$('j-text').value.trim();
+  const nameOverride=$('j-name').value.trim();
+  const status=$('j-status');
+
+  if(!text && editIdx<0){status.style.color='#e0954a';status.textContent='⚠️ Paste an itinerary to get started.';return;}
+
+  let stops=[], tripName=nameOverride;
+
+  if(text){
+    const parsed=parseItinerary(text);
+    if(!parsed.stops||parsed.stops.length<2){
+      status.style.color='var(--red)';
+      status.textContent='❌ No ports found — check the format and try again.';
+      return;
     }
+    stops=parsed.stops.map(s=>({...s, coords:resolveCoords(s.city)||null}));
+    if(!tripName) tripName=parsed.tripName||(stops[0].city+' → '+stops[stops.length-1].city);
+  } else if(editIdx>=0){
+    // Editing without new text — keep existing stops
+    stops=trips[editIdx].stops;
+    if(!tripName) tripName=trips[editIdx].name;
+  }
 
-    function focusOnTrip(index) {
-      const trip = trips[index];
-      const coords = getCityCoords(trip.departure);
-      if (coords) {
-        // Animate globe to show the trip
-        const targetRotation = -(coords.lng * Math.PI / 180);
-        globe.rotation.y = targetRotation;
-        
-        // Scroll back to globe
-        document.getElementById('globe-container').scrollIntoView({ behavior: 'smooth' });
-      }
-    }
+  if(stops.length<2){status.style.color='var(--red)';status.textContent='❌ Need at least 2 stops.';return;}
 
-    // Form submission
-    document.getElementById('trip-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      
-      const trip = {
-        name: document.getElementById('trip-name').value,
-        departure: document.getElementById('departure').value,
-        destination: document.getElementById('destination').value,
-        startDate: document.getElementById('start-date').value,
-        endDate: document.getElementById('end-date').value
-      };
+  const trip={name:tripName, stops, visible:true};
+  if(editIdx>=0){trips[editIdx]=trip;}
+  else{trips.push(trip);}
+  editIdx=-1;
+  saveTrips(); updateStats(); renderTrips();
 
-      const startCoords = getCityCoords(trip.departure);
-      const endCoords = getCityCoords(trip.destination);
+  status.style.color='#7ec87e';
+  status.textContent=`✅ ${stops.length} stops saved!`;
 
-      if (!startCoords) {
-        alert(`Sorry, "${trip.departure}" is not in our database yet. Try a major city nearby.`);
-        return;
-      }
+  // Fly to first stop
+  const first=stops[0];
+  if(first?.coords){rotLon=-first.coords[1];rotLat=-first.coords[0]*.7;spinning=false;}
 
-      if (!endCoords) {
-        alert(`Sorry, "${trip.destination}" is not in our database yet. Try a major city nearby.`);
-        return;
-      }
+  setTimeout(()=>{
+    close_('ov-journey');
+    $('j-name').value=''; $('j-text').value=''; $('j-status').textContent='';
+    editIdx=-1;
+  }, 1000);
+});
 
-      trips.push(trip);
-      saveTrips(trips);
-      addRouteToGlobe(trip);
-      
-      closeAddTrip();
-      
-      // Show success feedback
-      const btn = document.querySelector('.controls .primary');
-      const originalText = btn.textContent;
-      btn.textContent = '✓ Trip Added!';
-      setTimeout(() => {
-        btn.textContent = originalText;
-      }, 2000);
-    });
+// ── UI Wiring ─────────────────────────────────────────────────────────────────
+$('btn-trips').addEventListener('click',()=>{renderTrips();open_('ov-trips');});
+$('btn-add').addEventListener('click',()=>{
+  editIdx=-1; $('journey-title').textContent='New Journey';
+  $('j-name').value=''; $('j-text').value=''; $('j-status').textContent='';
+  open_('ov-journey');
+});
 
-    // Initialize on load
-    initGlobe();
-  </script>
+// Close overlays on background tap
+['ov-trips','ov-journey'].forEach(id=>{
+  $(id).addEventListener('click',e=>{if(e.target===$(id))close_(id);});
+});
+
+// Login wiring
+$('l-submit').addEventListener('click', doLogin);
+$('l-switch-btn').addEventListener('click',()=>setMode('register'));
+$('l-mode-link').addEventListener('click',()=>setMode(loginMode==='signin'?'register':'signin'));
+$('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+$('l-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('l-pass').focus();});
+
+// ── World load & boot ─────────────────────────────────────────────────────────
+async function loadWorld(){
+  try{
+    const r=await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    const t=await r.json();
+    worldData={land:topojson.feature(t,t.objects.land),borders:topojson.mesh(t,t.objects.countries,(a,b)=>a!==b)};
+  }catch{}
+}
+
+window.addEventListener('resize',()=>resize());
+resize();
+updateStats();
+loadWorld().then(()=>loop());
+</script>
 </body>
 </html>
