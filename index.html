@@ -1497,7 +1497,8 @@ function resetJourney() {
   if($('j-ship')) $('j-ship').value = '';
   if($('j-date')) $('j-date').value = '';
   if($('j-port')) $('j-port').value = '';
-  $('j-status').textContent = '';
+  if($('j-status')) $('j-status').textContent = '';
+  if($('j-paste-status')) $('j-paste-status').textContent = '';
   if($('j-name')) $('j-name').value = '';
   if($('j-text')) $('j-text').value = '';
   ['btn-past','btn-future'].forEach(id => { const el=$(id); if(el) el.classList.remove('selected'); });
@@ -1705,7 +1706,8 @@ $('j-save').addEventListener('click', () => {
   status.style.color = '#7ec87e'; status.textContent = `✅ ${stops.length} stops saved!`;
   const first = stops[0];
   if (first?.coords) { rotLon = -first.coords[1]; rotLat = -first.coords[0] * .7; spinning = false; }
-  setTimeout(() => { close_('ov-journey'); resetJourney(); }, 1000);
+  close_('ov-journey');
+  setTimeout(() => resetJourney(), 100);
 });
 
 $('btn-trips').addEventListener('click',()=>{renderTrips();open_('ov-trips');});
