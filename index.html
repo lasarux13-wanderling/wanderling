@@ -1040,41 +1040,53 @@ function draw() {
   ctx.beginPath(); gp({type:'Sphere'});
   ctx.strokeStyle='rgba(212,175,95,.18)'; ctx.lineWidth=1.2; ctx.stroke();
 
-  // Trip arcs
+  // Trip arcs and dots
   trips.forEach((t,ti) => {
     if (!t.visible || !t.stops?.length) return;
     const col = COLORS[ti%COLORS.length];
     const stops = t.stops;
 
-    // Draw arcs connecting stops that have coords — skip sea days but bridge over them
-    const portStops = stops.filter(s => s.coords);
-    for (let i=0; i<portStops.length-1; i++) {
-      const a=portStops[i], b=portStops[i+1];
+    // First assign estimated coords to sea days by interpolating between ports
+    const enriched = stops.map(s => ({...s}));
+    for (let i=0; i<enriched.length; i++) {
+      if (enriched[i].coords) continue;
+      // Find prev and next port with coords
+      let prev=null, next=null, pi=-1, ni=-1;
+      for (let j=i-1;j>=0;j--) { if(enriched[j].coords){prev=enriched[j];pi=j;break;} }
+      for (let j=i+1;j<enriched.length;j++) { if(enriched[j].coords){next=enriched[j];ni=j;break;} }
+      if (!prev||!next) continue;
+      const total = ni - pi;
+      const frac = (i - pi) / total;
+      const interp = d3.geoInterpolate([prev.coords[1],prev.coords[0]],[next.coords[1],next.coords[0]]);
+      const [lon,lat] = interp(frac);
+      enriched[i] = {...enriched[i], coords:[lat,lon], estimated:true};
+    }
+
+    // Draw arcs between consecutive stops (including estimated sea day positions)
+    for (let i=0;i<enriched.length-1;i++) {
+      const a=enriched[i], b=enriched[i+1];
+      if (!a.coords||!b.coords) continue;
+      // Skip zero-length arcs (same location)
+      const dist = Math.hypot(a.coords[0]-b.coords[0], a.coords[1]-b.coords[1]);
+      if (dist < 0.01) continue;
       drawArc(p, gp, a.coords[1],a.coords[0], b.coords[1],b.coords[0], col);
     }
 
-    // Draw dots for port stops
-    portStops.forEach((s,si)=>{
-      const c = si===0?'#e05a3a':si===portStops.length-1?col:'#ffffff';
-      drawDot(p, s.coords[1],s.coords[0], c, si===0||si===portStops.length-1?5:3.5);
-    });
-
-    // Draw approximate sea day dots along the arc
-    stops.forEach((s,si)=>{
-      if (s.coords || !s.date) return; // skip port stops and undated stops
-      // Find surrounding port stops
-      let prevPort=null, nextPort=null;
-      for (let j=si-1;j>=0;j--) { if(stops[j].coords){prevPort=stops[j];break;} }
-      for (let j=si+1;j<stops.length;j++) { if(stops[j].coords){nextPort=stops[j];break;} }
-      if (!prevPort||!nextPort) return;
-      // Count sea days between these ports to find position
-      const seaDaysBetween = stops.slice(stops.indexOf(prevPort)+1, stops.indexOf(nextPort)).filter(x=>!x.coords);
-      const totalGap = seaDaysBetween.length + 1;
-      const myPos = seaDaysBetween.indexOf(s) + 1;
-      const frac = myPos / totalGap;
-      const interp = d3.geoInterpolate([prevPort.coords[1],prevPort.coords[0]],[nextPort.coords[1],nextPort.coords[0]]);
-      const [lon,lat] = interp(frac);
-      drawDot(p, lon, lat, 'rgba(255,255,255,0.35)', 2.5);
+    // Draw dots
+    enriched.forEach((s,si)=>{
+      if (!s.coords) return;
+      const isFirst = si===0;
+      const isLast = si===enriched.length-1;
+      if (s.estimated) {
+        // Sea day — small faint dot
+        drawDot(p, s.coords[1],s.coords[0], 'rgba(255,255,255,0.4)', 2.5);
+      } else if (isFirst) {
+        drawDot(p, s.coords[1],s.coords[0], '#e05a3a', 5);
+      } else if (isLast) {
+        drawDot(p, s.coords[1],s.coords[0], col, 5);
+      } else {
+        drawDot(p, s.coords[1],s.coords[0], '#ffffff', 3.5);
+      }
     });
   });
 }
