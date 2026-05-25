@@ -1072,13 +1072,12 @@ function draw() {
       drawArc(p, gp, a.coords[1],a.coords[0], b.coords[1],b.coords[0], col);
     }
 
-    // Draw dots
+    // Draw dots and labels
     enriched.forEach((s,si)=>{
       if (!s.coords) return;
       const isFirst = si===0;
       const isLast = si===enriched.length-1;
       if (s.estimated) {
-        // Sea day — small faint dot
         drawDot(p, s.coords[1],s.coords[0], 'rgba(255,255,255,0.4)', 2.5);
       } else if (isFirst) {
         drawDot(p, s.coords[1],s.coords[0], '#e05a3a', 5);
@@ -1086,6 +1085,32 @@ function draw() {
         drawDot(p, s.coords[1],s.coords[0], col, 5);
       } else {
         drawDot(p, s.coords[1],s.coords[0], '#ffffff', 3.5);
+      }
+
+      // Show labels when zoomed in enough
+      if (zoom >= 2.5 && !s.estimated && s.coords) {
+        const pt = p([s.coords[1], s.coords[0]]);
+        if (!pt) return;
+        // Ship name appears after — in trip name e.g. "5-Night Bermuda — Independence of the Seas"
+        // Just grab first word after the dash, or first word of trip name
+        const nameParts = t.name || '';
+        const afterDash = nameParts.includes('—') ? nameParts.split('—')[1].trim() :
+                          nameParts.includes('–') ? nameParts.split('–')[1].trim() : nameParts;
+        const shipName = afterDash.split(/\s+/)[0] || '';
+        const dateStr = s.date ? s.date.slice(5).replace('-','/') + '/' + s.date.slice(2,4) : '';
+        const label = [shipName, s.city, dateStr].filter(Boolean).join('  ·  ');
+        const dpr = devicePixelRatio||1;
+        ctx.save();
+        ctx.font = `${Math.round(9*dpr)}px sans-serif`;
+        ctx.fillStyle = 'rgba(232,228,218,0.9)';
+        ctx.strokeStyle = 'rgba(7,9,15,0.85)';
+        ctx.lineWidth = 2.5*dpr;
+        ctx.textAlign = 'left';
+        const tx = pt[0] + 8;
+        const ty = pt[1] - 6;
+        ctx.strokeText(label, tx, ty);
+        ctx.fillText(label, tx, ty);
+        ctx.restore();
       }
     });
   });
