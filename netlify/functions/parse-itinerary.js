@@ -16,20 +16,68 @@ exports.handler = async function(event) {
 
   let contextText = text;
 
+  // Common "of the Seas" ships that users might abbreviate
+  const SHIP_EXPANSIONS = {
+    'independence': 'independence-of-the-seas',
+    'independence of the seas': 'independence-of-the-seas',
+    'anthem': 'anthem-of-the-seas',
+    'anthem of the seas': 'anthem-of-the-seas',
+    'symphony': 'symphony-of-the-seas',
+    'wonder': 'wonder-of-the-seas',
+    'icon': 'icon-of-the-seas',
+    'oasis': 'oasis-of-the-seas',
+    'allure': 'allure-of-the-seas',
+    'harmony': 'harmony-of-the-seas',
+    'navigator': 'navigator-of-the-seas',
+    'explorer': 'explorer-of-the-seas',
+    'adventure': 'adventure-of-the-seas',
+    'voyager': 'voyager-of-the-seas',
+    'freedom': 'freedom-of-the-seas',
+    'liberty': 'liberty-of-the-seas',
+    'mariner': 'mariner-of-the-seas',
+    'vision': 'vision-of-the-seas',
+    'radiance': 'radiance-of-the-seas',
+    'brilliance': 'brilliance-of-the-seas',
+    'serenade': 'serenade-of-the-seas',
+    'jewel': 'jewel-of-the-seas',
+    'enchantment': 'enchantment-of-the-seas',
+    'grandeur': 'grandeur-of-the-seas',
+    'utopia': 'utopia-of-the-seas',
+    'odyssey': 'odyssey-of-the-seas',
+    'spectrum': 'spectrum-of-the-seas',
+    'quantum': 'quantum-of-the-seas',
+    'ovation': 'ovation-of-the-seas',
+    'carnival glory': 'carnival-glory',
+    'carnival magic': 'carnival-magic',
+    'carnival dream': 'carnival-dream',
+    'carnival breeze': 'carnival-breeze',
+    'carnival vista': 'carnival-vista',
+    'carnival horizon': 'carnival-horizon',
+    'carnival celebration': 'carnival-celebration',
+    'norwegian cruise': 'norwegian-cruise-line',
+    'norwegian joy': 'norwegian-joy',
+    'norwegian bliss': 'norwegian-bliss',
+    'norwegian escape': 'norwegian-escape',
+    'norwegian prima': 'norwegian-prima',
+  };
+
   if (mode === 'search') {
     try {
       const lines = text.split('\n');
-      const ship = (lines.find(l => l.startsWith('Ship:')) || '').replace('Ship:', '').trim();
+      const shipRaw = (lines.find(l => l.startsWith('Ship:')) || '').replace('Ship:', '').trim();
       const dateRaw = (lines.find(l => l.startsWith('Departure date:')) || '').replace('Departure date:', '').trim();
 
-      if (ship && dateRaw) {
+      if (shipRaw && dateRaw) {
         const d = new Date(dateRaw);
         const dateStr = !isNaN(d) ? d.toISOString().split('T')[0] : '';
-        const shipSlug = ship.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        
+        // Resolve ship slug - check expansions first, then slugify
+        const shipKey = shipRaw.toLowerCase().trim();
+        const shipSlug = SHIP_EXPANSIONS[shipKey] || 
+          shipRaw.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-        // Most common cruise lines and night lengths — try them in parallel
         const cruiseLines = ['royal-caribbean','carnival','norwegian','celebrity','princess','holland-america','msc','disney'];
-        const nights = ['7-nights','5-nights','4-nights','6-nights','8-nights','9-nights','10-nights','11-nights','12-nights','3-nights'];
+        const nights = ['5-nights','7-nights','4-nights','6-nights','8-nights','9-nights','10-nights','11-nights','12-nights','3-nights','14-nights'];
 
         // Build all URLs
         const urls = [];
@@ -39,41 +87,40 @@ exports.handler = async function(event) {
           }
         }
 
-        // Fetch all in parallel with a race — first valid one wins
         const fetchOne = async (url) => {
           const res = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
             signal: AbortSignal.timeout(8000)
           });
-          if (!res.ok) throw new Error('not ok');
+          if (!res.ok) throw new Error(`${res.status}`);
           const html = await res.text();
-          if (!html.includes('Cruise Ports') && !html.includes('Day 1')) throw new Error('not itinerary');
+          if (!html.includes('Day 1') && !html.includes('Cruise Ports')) throw new Error('not itinerary');
           const plain = html
             .replace(/<script[\s\S]*?<\/script>/gi, '')
             .replace(/<style[\s\S]*?<\/style>/gi, '')
             .replace(/<[^>]+>/g, ' ')
-            .replace(/&amp;/g,'&').replace(/&#\d+;/g,' ')
-            .replace(/\s+/g, ' ').trim();
-          const startIdx = plain.search(/Cruise Itinerary|Cruise Ports|Day 1/i);
-          const endIdx = plain.search(/Weather Forecast|Shore Excursion|Safety Score/i);
-          if (startIdx === -1) throw new Error('no itinerary section');
-          return plain.slice(startIdx, endIdx > startIdx ? endIdx : startIdx + 4000);
+            .replace(/&amp;/g,'&').replace(/&#\d+;/g,' ').replace(/\s+/g,' ').trim();
+          const s = plain.search(/Day 1|Cruise Ports|Cruise Itinerary/i);
+          const e = plain.search(/Weather Forecast|Shore Excursion|Safety Score|Cruise Ship\b/i);
+          if (s === -1) throw new Error('no section');
+          return { text: plain.slice(s, e > s ? e : s+4000), url };
         };
 
-        // Try batches of 10 in parallel
+        // Parallel batches of 15
         let itineraryText = null;
-        for (let i = 0; i < urls.length; i += 10) {
-          const batch = urls.slice(i, i + 10);
+        let sourceUrl = null;
+        for (let i = 0; i < urls.length; i += 15) {
+          const batch = urls.slice(i, i+15);
           const results = await Promise.allSettled(batch.map(fetchOne));
-          const success = results.find(r => r.status === 'fulfilled');
-          if (success) {
-            itineraryText = success.value;
-            break;
-          }
+          const ok = results.find(r => r.status === 'fulfilled');
+          if (ok) { itineraryText = ok.value.text; sourceUrl = ok.value.url; break; }
         }
 
         if (itineraryText) {
-          contextText = `Ship: ${ship}\nDate: ${dateRaw}\n\nReal itinerary from gangwaze.com:\n${itineraryText}`;
+          contextText = `Ship: ${shipRaw}\nDate: ${dateRaw}\nSource: ${sourceUrl}\n\nItinerary data:\n${itineraryText}`;
+        } else {
+          // Nothing found — tell AI to use its knowledge
+          contextText = `Ship: ${shipRaw}\nDate: ${dateRaw}\n\nNo web data found. Use your knowledge to reconstruct the most likely itinerary for this sailing.`;
         }
       }
     } catch(e) {
@@ -82,18 +129,18 @@ exports.handler = async function(event) {
   }
 
   const systemPrompt = mode === 'search'
-    ? `You are a cruise itinerary assistant. Extract the cruise itinerary and return ONLY valid JSON, no markdown:
+    ? `You are a cruise itinerary assistant. Extract or reconstruct the cruise itinerary and return ONLY valid JSON, no markdown:
 {"tripName":"string","stops":[{"city":"City Name","date":"YYYY-MM-DD"}]}
 - Skip ALL At Sea / Sea Day entries
 - First stop = departure port, last stop = return port
-- All dates YYYY-MM-DD
+- All dates YYYY-MM-DD format
 - Clean city names: remove times, Depart/Return/Arrive labels
-- Trip name: "X-Night [Destination] — [Ship Name]"
-- If cannot determine, return {"stops":[]}`
+- Trip name format: "X-Night [Destination] — [Ship Name]"
+- If truly cannot determine, return {"stops":[]}`
     : `You are a travel itinerary parser. Return ONLY valid JSON, no markdown:
 {"tripName":"string","stops":[{"city":"City Name","date":"YYYY-MM-DD"}]}
 - Skip At Sea / Sea Day entries
-- Skip room, deck, reservation lines
+- Skip room, deck, reservation number lines
 - All dates YYYY-MM-DD
 - Remove times and Depart/Return/Arrive from city names`;
 
