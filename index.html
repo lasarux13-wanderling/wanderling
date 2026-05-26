@@ -1146,12 +1146,13 @@ function draw() {
 
         if (!pt) return;
 
-        const isHovered = hoveredLabel === labelHitAreas.length; // will be current index
+        const isHovered = hoveredLabel === labelHitAreas.length;
         ctx.save();
-        ctx.font = 'bold 9px sans-serif';
+        const fontSize = Math.min(16, Math.round(9 + zoom * 1.2));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        const lh = fontSize + 4;
         const metrics = ctx.measureText(label);
         const lw = metrics.width;
-        const lh = 14;
         const tx = pt[0] + 9;
         const ty = pt[1] - 8;
 
@@ -1305,7 +1306,7 @@ window.addEventListener('mouseup',e=>{
   }
   dragging=false;
 });
-canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(12,zoom*(e.deltaY<0?1.1:.92)));},{passive:false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(12,zoom*(e.deltaY<0?1.06:.95)));},{passive:false});
 
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault(); spinning=false;
@@ -1316,7 +1317,7 @@ canvas.addEventListener('touchstart',e=>{
 canvas.addEventListener('touchmove',e=>{
   e.preventDefault();
   if(e.touches.length===1&&dragging){rotLon=dr[0]+(e.touches[0].clientX-ds[0])*.4;rotLat=Math.max(-85,Math.min(85,dr[1]-(e.touches[0].clientY-ds[1])*.4));}
-  else if(e.touches.length===2&&pinchDist){const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(.3,Math.min(12,zoom*nd/pinchDist));pinchDist=nd;}
+  else if(e.touches.length===2&&pinchDist){const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(.3,Math.min(12,zoom*Math.pow(nd/pinchDist, 0.6)));pinchDist=nd;}
 },{passive:false});
 
 canvas.addEventListener('touchend', e=>{
