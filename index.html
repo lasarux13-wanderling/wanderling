@@ -1547,7 +1547,9 @@ function renderTrips(){
   list.innerHTML=sorted.map(({t,i})=>{
     const col=getTripColor(t);
     const s=t.stops||[];
-    const sub=`${s.length} stop${s.length!==1?'s':''}`;
+    const firstDate = s[0]?.date ? new Date(s[0].date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    const portStops = s.filter(st=>st.city!=='At Sea').length;
+    const sub = [firstDate, `${portStops} port${portStops!==1?'s':''}`].filter(Boolean).join(' · ');
     return `<div class="trip-card${t.visible?' visible':''}" id="tc${i}">
       <div class="card-head" onclick="toggleCard(${i})">
         <div class="card-check${t.visible?' on':''}" onclick="event.stopPropagation();toggleVis(${i})"></div>
@@ -1823,7 +1825,20 @@ $('j-save').addEventListener('click', () => {
     const parsed = parseItinerary(text);
     if (!parsed.stops || parsed.stops.length < 2) { status.style.color='var(--red)'; status.textContent='❌ No ports found.'; return; }
     stops = parsed.stops.map(s => ({ ...s, coords: resolveCoords(s.city) || null }));
-    if (!tripName) tripName = parsed.tripName || (stops[0].city + ' → ' + stops[stops.length-1].city);
+    if (!tripName) {
+      // Use parsed trip name with year appended
+      const yr = stops[0]?.date ? stops[0].date.slice(0,4) : '';
+      if (parsed.tripName) {
+        tripName = parsed.tripName + (yr ? ` (${yr})` : '');
+      } else {
+        // Last resort fallback
+        tripName = (stops[0]?.city?.split(',')[0] || 'Journey') + (yr ? ` (${yr})` : '');
+      }
+    } else if (tripName && !tripName.match(/\(\d{4}\)/)) {
+      // Add year to user-entered name if not already there
+      const yr = stops[0]?.date ? stops[0].date.slice(0,4) : '';
+      if (yr) tripName = tripName + ` (${yr})`;
+    }
     if (parsed.shipName && !shipNameOverride) shipNameOverride = parsed.shipName;
   } else if (editIdx >= 0) {
     stops = trips[editIdx].stops;
