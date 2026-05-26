@@ -1222,39 +1222,49 @@ canvas.addEventListener('mousemove', e => {
 
 function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
   const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
-  const N = Math.max(80, Math.round(80*zoom));
+  const N = 100;
   const coords = Array.from({length:N+1},(_,i)=>interp(i/N));
+
+  // Project all coords
+  const projected = coords.map(c => p(c));
 
   ctx.save();
 
-  // Thin base line
-  const line = {type:'LineString', coordinates: coords};
-  ctx.strokeStyle=color; ctx.lineWidth=1.2; ctx.globalAlpha=.55;
-  ctx.setLineDash([2,10]);
-  ctx.beginPath(); gp(line); ctx.stroke();
+  // Thin base line using segments between valid projected points
+  ctx.strokeStyle=color; ctx.lineWidth=1; ctx.globalAlpha=.4;
+  ctx.setLineDash([3,12]);
+  ctx.beginPath();
+  let started = false;
+  for (const pt of projected) {
+    if (!pt) { started=false; continue; }
+    if (!started) { ctx.moveTo(pt[0],pt[1]); started=true; }
+    else ctx.lineTo(pt[0],pt[1]);
+  }
+  ctx.stroke();
   ctx.setLineDash([]);
 
-  // Directional arrow chevrons along path
-  const arrowEvery = Math.max(6, Math.round(N/8));
-  const arrowSize = Math.max(4, Math.min(9, 5*zoom));
+  // Draw arrows every ~12 steps
+  const step = Math.max(8, Math.round(N/9));
+  const sz = Math.max(6, Math.min(12, 6 + zoom*1.5));
   ctx.fillStyle = color;
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 1;
 
-  for (let i = arrowEvery; i < coords.length-2; i += arrowEvery) {
-    const pt1 = p(coords[i]);
-    const pt2 = p(coords[i+2]);
-    if (!pt1||!pt2) continue;
-    const dx=pt2[0]-pt1[0], dy=pt2[1]-pt1[1];
-    const angle=Math.atan2(dy,dx);
-    const mx=(pt1[0]+pt2[0])/2, my=(pt1[1]+pt2[1])/2;
+  for (let i = step; i < N-2; i += step) {
+    const a = projected[i];
+    const b = projected[Math.min(i+3, N)];
+    if (!a || !b) continue;
+    const dx = b[0]-a[0], dy = b[1]-a[1];
+    if (Math.hypot(dx,dy) < 1) continue; // skip if too close (behind globe)
+    const angle = Math.atan2(dy,dx);
+    const mx = a[0], my = a[1];
     ctx.save();
-    ctx.translate(mx,my);
+    ctx.translate(mx, my);
     ctx.rotate(angle);
     ctx.beginPath();
-    ctx.moveTo(arrowSize, 0);
-    ctx.lineTo(-arrowSize*.65, -arrowSize*.5);
-    ctx.lineTo(-arrowSize*.25, 0);
-    ctx.lineTo(-arrowSize*.65, arrowSize*.5);
+    ctx.moveTo(sz, 0);
+    ctx.lineTo(-sz*.7, -sz*.55);
+    ctx.lineTo(-sz*.3, 0);
+    ctx.lineTo(-sz*.7, sz*.55);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
