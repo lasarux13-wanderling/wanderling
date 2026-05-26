@@ -1146,6 +1146,7 @@ function draw() {
 
         if (!pt) return;
 
+        const isHovered = hoveredLabel === labelHitAreas.length; // will be current index
         ctx.save();
         ctx.font = 'bold 9px sans-serif';
         const metrics = ctx.measureText(label);
@@ -1154,22 +1155,30 @@ function draw() {
         const tx = pt[0] + 9;
         const ty = pt[1] - 8;
 
-        // Background pill to make it look tappable
-        ctx.fillStyle = 'rgba(7,9,15,0.72)';
+        if (isHovered) {
+          // Glow effect
+          ctx.shadowColor = 'rgba(212,175,95,0.9)';
+          ctx.shadowBlur = 12;
+        }
+
+        // Background pill
+        ctx.fillStyle = isHovered ? 'rgba(212,175,95,0.25)' : 'rgba(7,9,15,0.72)';
         ctx.beginPath();
         ctx.roundRect(tx-3, ty-lh+3, lw+8, lh+2, 4);
         ctx.fill();
 
-        // Underline to show it's tappable
-        ctx.fillStyle = 'rgba(212,175,95,0.95)';
+        ctx.shadowBlur = 0;
+
+        // Text
+        ctx.fillStyle = isHovered ? '#ffd97a' : 'rgba(212,175,95,0.95)';
         ctx.strokeStyle = 'rgba(7,9,15,0.9)';
         ctx.lineWidth = 2;
         ctx.strokeText(label, tx, ty);
         ctx.fillText(label, tx, ty);
 
         // Underline
-        ctx.strokeStyle = 'rgba(212,175,95,0.5)';
-        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = isHovered ? 'rgba(255,217,122,0.8)' : 'rgba(212,175,95,0.5)';
+        ctx.lineWidth = isHovered ? 1.2 : 0.8;
         ctx.beginPath();
         ctx.moveTo(tx, ty+2);
         ctx.lineTo(tx+lw, ty+2);
@@ -1190,16 +1199,67 @@ function draw() {
 
 // Store label hit areas for tap detection
 const labelHitAreas = [];
+let hoveredLabel = null; // currently hovered label index
+
+// Track mouse position for hover effect
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  let found = null;
+  for (let i=0; i<labelHitAreas.length; i++) {
+    const h = labelHitAreas[i];
+    if (x >= h.x-4 && x <= h.x+h.w+4 && y >= h.y-4 && y <= h.y+h.h+4) {
+      found = i; break;
+    }
+  }
+  if (found !== hoveredLabel) {
+    hoveredLabel = found;
+    canvas.style.cursor = found !== null ? 'pointer' : '';
+    dirty = true;
+  }
+});
 
 function drawArc(p,gp,lon1,lat1,lon2,lat2,color) {
   const interp = d3.geoInterpolate([lon1,lat1],[lon2,lat2]);
-  const N = Math.max(60, Math.round(60*zoom));
-  const line = {type:'LineString', coordinates:Array.from({length:N+1},(_,i)=>interp(i/N))};
+  const N = Math.max(80, Math.round(80*zoom));
+  const coords = Array.from({length:N+1},(_,i)=>interp(i/N));
+
   ctx.save();
-  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=.85;
-  ctx.setLineDash([6,5]);
+
+  // Thin base line
+  const line = {type:'LineString', coordinates: coords};
+  ctx.strokeStyle=color; ctx.lineWidth=1.2; ctx.globalAlpha=.55;
+  ctx.setLineDash([2,10]);
   ctx.beginPath(); gp(line); ctx.stroke();
   ctx.setLineDash([]);
+
+  // Directional arrow chevrons along path
+  const arrowEvery = Math.max(6, Math.round(N/8));
+  const arrowSize = Math.max(4, Math.min(9, 5*zoom));
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.92;
+
+  for (let i = arrowEvery; i < coords.length-2; i += arrowEvery) {
+    const pt1 = p(coords[i]);
+    const pt2 = p(coords[i+2]);
+    if (!pt1||!pt2) continue;
+    const dx=pt2[0]-pt1[0], dy=pt2[1]-pt1[1];
+    const angle=Math.atan2(dy,dx);
+    const mx=(pt1[0]+pt2[0])/2, my=(pt1[1]+pt2[1])/2;
+    ctx.save();
+    ctx.translate(mx,my);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(arrowSize, 0);
+    ctx.lineTo(-arrowSize*.65, -arrowSize*.5);
+    ctx.lineTo(-arrowSize*.25, 0);
+    ctx.lineTo(-arrowSize*.65, arrowSize*.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
